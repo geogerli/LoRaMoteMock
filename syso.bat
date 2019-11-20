@@ -1,0 +1,1 @@
+rsrc -manifest LoRaDTUMock.manifest -ico dot.ico -o rsrc.syso

@@ -1,0 +1,12 @@
+{
+	"otaa": false,
+	"gatewayId": "0102030405060708",
+	"devEui": "6ef1881ba5541419",
+	"devAddr": "0c18699",
+	"appKey": "",
+	"appSKey": "33998df974421457437d986eff739ffa",
+	"nwkSKey": "33998df974421457437d986eff739ffa",
+	"fPort": 2,
+	"fCnt": 0,
+	"freq": 470.3
+}
