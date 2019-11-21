@@ -1,12 +1,12 @@
 {
-	"otaa": false,
+	"otaa": true,
 	"gatewayId": "0102030405060708",
-	"devEui": "6ef1881ba5541419",
-	"devAddr": "0c18699",
-	"appKey": "",
-	"appSKey": "33998df974421457437d986eff739ffa",
-	"nwkSKey": "33998df974421457437d986eff739ffa",
+	"devEui": "b92fd5d497cfcdbd",
+	"devAddr": "014103a9",
+	"appKey": "fe80c1f94e6cc62d5d6f72630b43c177",
+	"appSKey": "0480e6cbb40dd741044aec83166407b3",
+	"nwkSKey": "9aef4b57ea62cb2f7103c97c3d2a169e",
 	"fPort": 2,
-	"fCnt": 0,
+	"fCnt": 19,
 	"freq": 470.3
 }

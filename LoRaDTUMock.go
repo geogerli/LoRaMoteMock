@@ -114,6 +114,7 @@ func main() {
 						Columns: []TableViewColumn{
 							{Title: "序号"},
 							{Title: "终端EUI"},
+							{Title: "消息类型"},
 							{Title: "网关ID"},
 							{Title: "信号强度"},
 							{Title: "信噪比"},
@@ -135,8 +136,9 @@ func main() {
 						Columns: []TableViewColumn{
 							{Title: "序号"},
 							{Title: "终端EUI"},
+							{Title: "消息类型"},
+							{Title: "终端地址"},
 							{Title: "网关ID"},
-							{Title: "频率"},
 							{Title: "计数"},
 							{Title: "端口"},
 							{Title: "HEX数据"},
@@ -301,6 +303,7 @@ func (mw *DTUMainWindow) DTUConfig()  {
 							devAddr.SetEnabled(false)
 							appSKey.SetEnabled(false)
 							nwkSKey.SetEnabled(false)
+							_ = devAddr.SetText("")
 						}else{
 							appKey.SetEnabled(false)
 							devAddr.SetEnabled(true)
@@ -677,6 +680,7 @@ func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 				dd := &model.DTUDown{
 					Index: mw.downModel.Len() + 1,
 					DevEUI: mw.dtuConf.DevEui,
+					MType: phy.MHDR.MType.String(),
 					DevAddr: mw.dtuConf.DevAddr,
 					GatewayID: hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
 					Time:time.Now().Format("2006-01-02 15:04:05"),
