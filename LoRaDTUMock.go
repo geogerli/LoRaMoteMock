@@ -607,12 +607,12 @@ func (mw *DTUMainWindow) sendMsg() error{
 	}
 	var fCtrl lorawan.FCtrl
 	_ = fCtrl.UnmarshalBinary([]byte{128})
-	key := mw.dtuConf.NwkSKey
+	key := mw.dtuConf.AppSKey
 	if mw.dtuConf.FPort == 0 {
 		key = mw.dtuConf.NwkSKey
 	}
 	packet,phy,_ := BuildUpData(mw.dtuConf.GatewayId,mw.dtuConf.DevAddr,key,
-		mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
+		mw.dtuConf.NwkSKey,mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
 		lorawan.UnconfirmedDataUp,fCtrl,-51,bmsg)
 
 	var origData bytes.Buffer

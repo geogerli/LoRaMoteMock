@@ -53,7 +53,7 @@ func newTLSConfig(cafile, certFile, certKeyFile string) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-func BuildUpData(gatewayId,devAddr, key string,
+func BuildUpData(gatewayId,devAddr, appSKey,nwkSKey string,
 				fCnt uint32,fPort,dr,ch uint8,freq,lsnr float64,
 				mType lorawan.MType,fCtrl lorawan.FCtrl,rssi int16,
 				userData []byte) (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
@@ -82,10 +82,13 @@ func BuildUpData(gatewayId,devAddr, key string,
 	mac.FRMPayload = []lorawan.Payload{&dataPayload}
 	phy.MACPayload = &mac
 	var aesKey lorawan.AES128Key
-	if err := aesKey.UnmarshalText([]byte(key));err != nil {
+	if err := aesKey.UnmarshalText([]byte(appSKey));err != nil {
 		return nil,nil,err
 	}
 	if err := phy.EncryptFRMPayload(aesKey);err != nil {
+		return nil,nil,err
+	}
+	if err := aesKey.UnmarshalText([]byte(nwkSKey));err != nil {
 		return nil,nil,err
 	}
 	sf :=[...]string{"SF12","SF11","SF10","SF9","SF8","SF7"}

@@ -2,11 +2,11 @@
 	"otaa": true,
 	"gatewayId": "0102030405060708",
 	"devEui": "b92fd5d497cfcdbd",
-	"devAddr": "014103a9",
+	"devAddr": "00530747",
 	"appKey": "fe80c1f94e6cc62d5d6f72630b43c177",
-	"appSKey": "0480e6cbb40dd741044aec83166407b3",
-	"nwkSKey": "9aef4b57ea62cb2f7103c97c3d2a169e",
+	"appSKey": "2bc9217655160b2c1229b5ecb469242f",
+	"nwkSKey": "4f862983a453cc50336284fd3c62aba5",
 	"fPort": 2,
-	"fCnt": 19,
+	"fCnt": 1,
 	"freq": 470.3
 }

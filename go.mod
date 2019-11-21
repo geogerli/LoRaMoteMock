@@ -3,8 +3,8 @@ module LoRaDTUMock
 go 1.12
 
 require (
-	github.com/brocaar/loraserver v0.0.0-20190729122155-2f0bb9c308bc
-	github.com/brocaar/lorawan v0.0.0-20190709091804-c3a80883a8fa
+	github.com/brocaar/loraserver v0.0.0-20190917115647-c4da45f52f2b
+	github.com/brocaar/lorawan v0.0.0-20190814113539-8eb2a8d6da09
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/golang/protobuf v1.3.2
 	github.com/lxn/walk v0.0.0-20191113135339-bf589de20b3c
