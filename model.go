@@ -27,7 +27,6 @@ type DTUConfig struct {
 	FPort     uint8		`json:"fPort"`
 	FCnt      uint32	`json:"fCnt"`
 	Freq      float64	`json:"freq"`
-	msg       []byte
 	devNonce  lorawan.DevNonce
 }
 

@@ -13,9 +13,11 @@ import (
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -24,11 +26,13 @@ type DTUMainWindow struct {
 	mqttClient 							paho.Client
 	model                             	*DTUModel
 	tv                        			*walk.TableView
+	jsonView 							*walk.TreeView
 	host,username,password 				*walk.LineEdit
-	port             					*walk.NumberEdit
+	port,sendInterval             		*walk.NumberEdit
 	connect, disconnect,caConf,send     *walk.PushButton
-	msg                            		*walk.TextEdit
-	ssl               					*walk.CheckBox
+	ascii,noAscii 						*walk.RadioButton
+	msg,data                        	*walk.TextEdit
+	ssl,timeSend               			*walk.CheckBox
 	connConf                            ConnectConfig
 	dtuConf 							DTUConfig
 	connConfFileName 					string
@@ -62,7 +66,7 @@ func main() {
 					CheckBox{Text:"开启SSL/TLS",AssignTo:&mw.ssl,OnClicked:mw.SSL},
 					PushButton{Text:"证书配置",Enabled:false,AssignTo:&mw.caConf,OnClicked: mw.ConnectConfig},
 					PushButton{Text:"终端配置",OnClicked: mw.DTUConfig},
-					PushButton{Text:"发送",AssignTo:&mw.send,OnClicked: mw.Send},
+					PushButton{Text:"清空数据",OnClicked: mw.Clean},
 				},
 			},
 			Composite{
@@ -70,7 +74,7 @@ func main() {
 				Children: []Widget{
 					TableView{
 						AssignTo:         &mw.tv,
-						CheckBoxes:       true,
+						MinSize:Size{Width:maxWidth*3/5},
 						ColumnsOrderable: true,
 						MultiSelection:   true,
 						Columns: []TableViewColumn{
@@ -92,6 +96,45 @@ func main() {
 						Model: mw.model,
 						OnItemActivated: mw.tvItemActivated,
 					},
+					GroupBox{
+						Title:"发送区",
+						Layout:VBox{SpacingZero:true},
+						Children:[]Widget{
+							Composite{
+								Layout:Grid{Columns:3},
+								Children:[]Widget{
+									Label{Text:"编码方式:"},
+									RadioButton{Text:"ASCII数据",AssignTo:&mw.ascii},
+									RadioButton{Text:"Hex数据",AssignTo:&mw.noAscii},
+
+									CheckBox{Text:"定时发送",AssignTo:&mw.timeSend,OnClicked:mw.TimeSend},
+									NumberEdit{AssignTo:&mw.sendInterval},
+									Label{Text:"ms/次"},
+								},
+							},
+							Composite{
+								Layout:VBox{},
+								Children:[]Widget{
+									Label{Text:"消息"},
+									TextEdit{AssignTo:&mw.msg},
+								},
+							},
+							Composite{
+								Layout:HBox{},
+								Children:[]Widget{
+									HSpacer{},
+									PushButton{Text:"发送",AssignTo:&mw.send,OnClicked: mw.SendMsg},
+								},
+							},
+						},
+					},
+				},
+			},
+			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					TextEdit{AssignTo:&mw.data,ReadOnly:true,HScroll:true,VScroll:true},
+					TreeView{AssignTo: &mw.jsonView},
 				},
 			},
 		},
@@ -100,9 +143,10 @@ func main() {
 		panic("LoRaDTUMock窗口创建失败")
 	}
 	_ = mw.port.SetValue(1883)
+	_ = mw.sendInterval.SetValue(1000)
+	mw.ascii.SetChecked(true)
 	dir,_ := os.Getwd()
 	mw.connConfFileName = dir + "/LoRaDTUMock.json"
-	mw.dtuConfFileName = dir + "/LoRaDTUConf.json"
 	data, err := ioutil.ReadFile(mw.connConfFileName)
 	if err == nil {
 		err = json.Unmarshal(data, &mw.connConf)
@@ -115,6 +159,16 @@ func main() {
 		_ = mw.port.SetValue(float64(mw.connConf.Port))
 		_ = mw.username.SetText(mw.connConf.Username)
 		_ = mw.password.SetText(mw.connConf.Password)
+	}
+	mw.dtuConfFileName = dir + "/LoRaDTUConf.json"
+	data, err = ioutil.ReadFile(mw.dtuConfFileName)
+	if err == nil {
+		err = json.Unmarshal(data, &mw.dtuConf)
+		if err != nil {
+			msg := "配置文件格式错误:" + err.Error()
+			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+			return
+		}
 	}
 	mw.Run()
 }
@@ -197,7 +251,6 @@ func (mw *DTUMainWindow) DTUConfig()  {
 	var otaa *walk.CheckBox
 	var gatewayId,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
 	var fPort,fCnt,freq *walk.NumberEdit
-	var msg *walk.TextEdit
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
 		Title: "DTU配置",
@@ -233,18 +286,16 @@ func (mw *DTUMainWindow) DTUConfig()  {
 					LineEdit{AssignTo:&devAddr},
 					Label{Text:"应用秘钥:"},
 					LineEdit{AssignTo:&appKey,Enabled:false},
-					Label{Text:"应用会话秘钥:"},
-					LineEdit{AssignTo:&appSKey},
 					Label{Text:"网络会话秘钥:"},
 					LineEdit{AssignTo:&nwkSKey},
+					Label{Text:"应用会话秘钥:"},
+					LineEdit{AssignTo:&appSKey},
 					Label{Text:"端口:"},
 					NumberEdit{AssignTo:&fPort},
 					Label{Text:"计数:"},
 					NumberEdit{AssignTo:&fCnt},
 					Label{Text:"频率:"},
 					NumberEdit{AssignTo:&freq,Decimals:2},
-					Label{Text:"消息:"},
-					TextEdit{AssignTo:&msg},
 				},
 			},
 			Composite{
@@ -265,7 +316,6 @@ func (mw *DTUMainWindow) DTUConfig()  {
 							mw.dtuConf.FPort = uint8(fPort.Value())
 							mw.dtuConf.FCnt = uint32(fCnt.Value())
 							mw.dtuConf.Freq = freq.Value()
-							mw.dtuConf.msg = []byte(msg.Text())
 
 							var confData bytes.Buffer
 							d,_  := json.Marshal(&mw.dtuConf)
@@ -283,15 +333,7 @@ func (mw *DTUMainWindow) DTUConfig()  {
 			},
 		},
 	}.Create(mw)
-	data, err := ioutil.ReadFile(mw.dtuConfFileName)
-	if err == nil {
-		err = json.Unmarshal(data, &mw.dtuConf)
-		if err != nil {
-			msg := "配置文件格式错误:" + err.Error()
-			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
-			return
-		}
-	}
+
 	otaa.SetChecked(mw.dtuConf.OTAA)
 	_ = gatewayId.SetText(mw.dtuConf.GatewayId)
 	_ = devEUI.SetText(mw.dtuConf.DevEui)
@@ -302,9 +344,13 @@ func (mw *DTUMainWindow) DTUConfig()  {
 	_ = fPort.SetValue(float64(mw.dtuConf.FPort))
 	_ = fCnt.SetValue(float64(mw.dtuConf.FCnt))
 	_ = freq.SetValue(mw.dtuConf.Freq)
-	_ = msg.SetText(string(mw.dtuConf.msg))
 
 	dlg.Run()
+}
+func (mw *DTUMainWindow) Clean()  {
+	mw.model.Items = []*DTU{}
+	mw.model.PublishRowsReset()
+	_ = mw.tv.SetSelectedIndexes([]int{})
 }
 func (mw *DTUMainWindow) SSL()  {
 	if mw.ssl.Checked() {
@@ -399,22 +445,6 @@ func (mw *DTUMainWindow) ConnectConfig()  {
 	dlg.Run()
 }
 
-func (mw *DTUMainWindow) BuildUpData() (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
-	var fCtrl lorawan.FCtrl
-	_ = fCtrl.UnmarshalBinary([]byte{128})
-	return BuildUpData(mw.dtuConf.GatewayId,mw.dtuConf.DevAddr,mw.dtuConf.NwkSKey,
-		mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
-		lorawan.UnconfirmedDataUp,fCtrl,-51,mw.dtuConf.msg)
-}
-
-func (mw *DTUMainWindow) BuildJoin() (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
-	mw.dtuConf.devNonce = lorawan.DevNonce(rand.Uint32())
-	appEui := "0807060504030201"
-	return BuildJoin(mw.dtuConf.GatewayId,appEui,mw.dtuConf.DevEui,mw.dtuConf.AppKey,
-		5,2,mw.dtuConf.Freq,7,-51, mw.dtuConf.devNonce)
-}
-
-
 func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 	var downlinkFrame gw.DownlinkFrame
 	err := proto.Unmarshal(message.Payload(),&downlinkFrame)
@@ -492,12 +522,16 @@ func (mw *DTUMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
 }
 
 func (mw *DTUMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
-	key := mw.dtuConf.NwkSKey
+	mpl := phy.MACPayload.(*lorawan.MACPayload)
+	key := mw.dtuConf.AppSKey
+	if mpl.FPort != nil && *mpl.FPort == 0 {
+		key = mw.dtuConf.NwkSKey
+	}
+
 	var aseKey lorawan.AES128Key
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptFRMPayload(aseKey)
 	if err == nil {
-		mpl := phy.MACPayload.(*lorawan.MACPayload)
 		mw.dtuConf.DevAddr = mpl.FHDR.DevAddr.String()
 	}
 }
@@ -515,10 +549,17 @@ func (mw *DTUMainWindow) PushData(gatewayEUI string,event string, msg proto.Mess
 		fmt.Println("mqtt message error")
 	}
 }
-
-func (mw *DTUMainWindow) Send(){
+func (mw *DTUMainWindow) sendMsg() error{
+	if mw.mqttClient == nil || !mw.mqttClient.IsConnected() {
+		msg := "请先连接服务器"
+		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+		return errors.New("请先连接服务器")
+	}
 	if mw.dtuConf.OTAA && mw.dtuConf.DevAddr == ""{
-		packet,phy,_ := mw.BuildJoin()
+		mw.dtuConf.devNonce = lorawan.DevNonce(rand.Uint32())
+		appEui := "0807060504030201"
+		packet,phy,_ := BuildJoin(mw.dtuConf.GatewayId,appEui,mw.dtuConf.DevEui,mw.dtuConf.AppKey,
+			5,2,mw.dtuConf.Freq,7,-51, mw.dtuConf.devNonce)
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
@@ -549,10 +590,31 @@ func (mw *DTUMainWindow) Send(){
 			fmt.Println("join ok")
 		}else{
 			fmt.Println("join failed")
-			return
+			return errors.New("join failed")
 		}
 	}
-	packet,phy,_ := mw.BuildUpData()
+	var bmsg []byte
+	var err error
+	if mw.ascii.Checked() {
+		bmsg = []byte(mw.msg.Text())
+	}else{
+		bmsg,err = hex.DecodeString(mw.msg.Text())
+		if err != nil {
+			msg := "hex数据格式错误:" + err.Error()
+			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+			return err
+		}
+	}
+	var fCtrl lorawan.FCtrl
+	_ = fCtrl.UnmarshalBinary([]byte{128})
+	key := mw.dtuConf.NwkSKey
+	if mw.dtuConf.FPort == 0 {
+		key = mw.dtuConf.NwkSKey
+	}
+	packet,phy,_ := BuildUpData(mw.dtuConf.GatewayId,mw.dtuConf.DevAddr,key,
+		mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
+		lorawan.UnconfirmedDataUp,fCtrl,-51,bmsg)
+
 	var origData bytes.Buffer
 	jsonData,_ := phy.MarshalJSON()
 	_ = json.Indent(&origData, jsonData, "", "  ")
@@ -568,8 +630,8 @@ func (mw *DTUMainWindow) Send(){
 		Frequency:packet.Payload.RXPK[0].Freq,
 		FCnt:mw.dtuConf.FCnt,
 		FPort:mw.dtuConf.FPort,
-		HexData:hex.EncodeToString(mw.dtuConf.msg),
-		AsciiData:BytesToString(mw.dtuConf.msg),
+		HexData:hex.EncodeToString(bmsg),
+		AsciiData:BytesToString(bmsg),
 		Time:time.Now().Format("2006-01-02 15:04:05"),
 		OrigData:origData.String(),
 	}
@@ -585,12 +647,58 @@ func (mw *DTUMainWindow) Send(){
 	d,_  := json.Marshal(&mw.dtuConf)
 	_ = json.Indent(&confData, d, "", "\t")
 	_ = ioutil.WriteFile(mw.dtuConfFileName,confData.Bytes(),0644)
+	return nil
 }
 
+func (mw *DTUMainWindow) SendMsg() {
+	go mw.sendMsg()
+}
+func (mw *DTUMainWindow) SetSend() {
+	if mw.timeSend.Checked() {
+		mw.ascii.SetEnabled(false)
+		mw.noAscii.SetEnabled(false)
+		mw.sendInterval.SetEnabled(false)
+		mw.msg.SetEnabled(false)
+		mw.send.SetEnabled(false)
+	}else{
+		mw.ascii.SetEnabled(true)
+		mw.noAscii.SetEnabled(true)
+		mw.sendInterval.SetEnabled(true)
+		mw.msg.SetEnabled(true)
+		mw.send.SetEnabled(true)
+	}
+}
+
+func (mw *DTUMainWindow) TimeSend()  {
+	if mw.sendInterval.Value() <= 0 {
+		msg := "时间间隔需大于0"
+		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+		return
+	}
+	mw.SetSend()
+	go func() {
+		for{
+			if !mw.timeSend.Checked() {
+				break
+			}
+			if err := mw.sendMsg();err != nil {
+				mw.timeSend.SetChecked(false)
+				mw.SetSend()
+				break
+			}
+			time.Sleep(time.Duration(mw.sendInterval.Value()) * time.Millisecond)
+		}
+	}()
+}
 func (mw *DTUMainWindow) tvItemActivated() {
 	msg := ""
 	for _, i := range mw.tv.SelectedIndexes() {
 		msg += mw.model.Items[i].OrigData + "\n"
 	}
-	walk.MsgBox(mw, "原始数据", msg, walk.MsgBoxOK)
+	_ = mw.data.SetText(strings.Replace(msg, "\n", "\r\n", -1))
+
+	m := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(msg), &m); err == nil {
+		_ = mw.jsonView.SetModel(NewJSONModel(m))
+	}
 }

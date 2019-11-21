@@ -53,7 +53,7 @@ func newTLSConfig(cafile, certFile, certKeyFile string) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-func BuildUpData(gatewayId,devAddr,nwkSKey string,
+func BuildUpData(gatewayId,devAddr, key string,
 				fCnt uint32,fPort,dr,ch uint8,freq,lsnr float64,
 				mType lorawan.MType,fCtrl lorawan.FCtrl,rssi int16,
 				userData []byte) (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
@@ -81,15 +81,15 @@ func BuildUpData(gatewayId,devAddr,nwkSKey string,
 	}
 	mac.FRMPayload = []lorawan.Payload{&dataPayload}
 	phy.MACPayload = &mac
-	var aseKey lorawan.AES128Key
-	if err := aseKey.UnmarshalText([]byte(nwkSKey));err != nil {
+	var aesKey lorawan.AES128Key
+	if err := aesKey.UnmarshalText([]byte(key));err != nil {
 		return nil,nil,err
 	}
-	if err := phy.EncryptFRMPayload(aseKey);err != nil {
+	if err := phy.EncryptFRMPayload(aesKey);err != nil {
 		return nil,nil,err
 	}
 	sf :=[...]string{"SF12","SF11","SF10","SF9","SF8","SF7"}
-	if err := phy.SetUplinkDataMIC(lorawan.LoRaWAN1_0, 0, dr, ch, aseKey, aseKey);err != nil {
+	if err := phy.SetUplinkDataMIC(lorawan.LoRaWAN1_0, 0, dr, ch, aesKey, aesKey);err != nil {
 		return nil,nil,err
 	}
 	data,err := phy.MarshalBinary();
@@ -154,12 +154,12 @@ func BuildJoin(gatewayId,appEui,devEui,appKey string,dr,ch uint8,
 		JoinEUI:  joinEUI,
 		DevNonce: devNonce,
 	}
-	var aseKey lorawan.AES128Key
-	if err := aseKey.UnmarshalText([]byte(appKey));err != nil{
+	var aesKey lorawan.AES128Key
+	if err := aesKey.UnmarshalText([]byte(appKey));err != nil{
 		return nil,nil,err
 	}
 	sf :=[...]string{"SF12","SF11","SF10","SF9","SF8","SF7"}
-	if err := phy.SetUplinkJoinMIC(aseKey);err != nil{
+	if err := phy.SetUplinkJoinMIC(aesKey);err != nil{
 		return nil,nil,err
 	}
 	data,err := phy.MarshalBinary()
