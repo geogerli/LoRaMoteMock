@@ -1,12 +1,8 @@
 package main
 
 import (
-	"LoRaDTUMock/model"
 	"LoRaDTUMock/packets"
 	"bytes"
-	"crypto/aes"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,45 +13,17 @@ import (
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"syscall"
 	"time"
 )
-
-type ConnectConfig struct {
-	Host string `json:"host"`
-	Port int `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	CACert string	`json:"ca_cert"`
-	TLSCert string	`json:"tls_cert"`
-	TLSKey string `json:"tls_key"`
-}
-
-type DTUConfig struct {
-	OTAA      bool 		`json:"otaa"`
-	GatewayId string	`json:"gatewayId"`
-	DevEui    string	`json:"devEui"`
-	DevAddr   string	`json:"devAddr"`
-	AppKey    string	`json:"appKey"`
-	AppSKey   string	`json:"appSKey"`
-	NwkSKey   string	`json:"nwkSKey"`
-	FPort     uint8		`json:"fPort"`
-	FCnt      uint32	`json:"fCnt"`
-	Freq      float64	`json:"freq"`
-	msg       []byte
-	devNonce  lorawan.DevNonce
-}
 
 type DTUMainWindow struct {
 	*walk.MainWindow
 	mqttClient 							paho.Client
-	upModel                             *model.DTUUpModel
-	downModel                           *model.DTUDownModel
-	upTv,downTv                         *walk.TableView
+	model                             	*DTUModel
+	tv                        			*walk.TableView
 	host,username,password 				*walk.LineEdit
 	port             					*walk.NumberEdit
 	connect, disconnect,caConf,send     *walk.PushButton
@@ -66,15 +34,9 @@ type DTUMainWindow struct {
 	connConfFileName 					string
 	dtuConfFileName						string
 }
-func BytesToString(b []byte) string {
-	_,err := syscall.UTF16FromString(string(b))
-	if err == nil {
-		return string(b)
-	}
-	return ""
-}
+
 func main() {
-	mw := &DTUMainWindow{upModel: model.NewDTUUpModel(),downModel:model.NewDTUDownModel()}
+	mw := &DTUMainWindow{model: NewDTUModel()}
 	maxWidth := int(win.GetSystemMetrics(win.SM_CXSCREEN)) - 200
 	maxHeight := int(win.GetSystemMetrics(win.SM_CYSCREEN)) - 100
 	err := MainWindow{
@@ -107,13 +69,15 @@ func main() {
 				Layout: HBox{},
 				Children: []Widget{
 					TableView{
-						AssignTo:         &mw.upTv,
+						AssignTo:         &mw.tv,
 						CheckBoxes:       true,
 						ColumnsOrderable: true,
 						MultiSelection:   true,
 						Columns: []TableViewColumn{
 							{Title: "序号"},
+							{Title: "数据方向"},
 							{Title: "终端EUI"},
+							{Title: "终端地址"},
 							{Title: "消息类型"},
 							{Title: "网关ID"},
 							{Title: "信号强度"},
@@ -125,28 +89,8 @@ func main() {
 							{Title: "ASCII数据"},
 							{Title: "时间"},
 						},
-						Model: mw.upModel,
-						OnItemActivated: mw.upTvItemActivated,
-					},
-					TableView{
-						AssignTo:         &mw.downTv,
-						CheckBoxes:       true,
-						ColumnsOrderable: true,
-						MultiSelection:   true,
-						Columns: []TableViewColumn{
-							{Title: "序号"},
-							{Title: "终端EUI"},
-							{Title: "消息类型"},
-							{Title: "终端地址"},
-							{Title: "网关ID"},
-							{Title: "计数"},
-							{Title: "端口"},
-							{Title: "HEX数据"},
-							{Title: "ASCII数据"},
-							{Title: "时间"},
-						},
-						Model:  mw.downModel,
-						OnItemActivated: mw.downTvItemActivated,
+						Model: mw.model,
+						OnItemActivated: mw.tvItemActivated,
 					},
 				},
 			},
@@ -175,36 +119,6 @@ func main() {
 	mw.Run()
 }
 
-func newTLSConfig(cafile, certFile, certKeyFile string) (*tls.Config, error) {
-	if cafile == "" && certFile == "" && certKeyFile == "" {
-		return nil, nil
-	}
-
-	tlsConfig := &tls.Config{}
-
-	// Import trusted certificates from CAfile.pem.
-	if cafile != "" {
-		cacert, err := ioutil.ReadFile(cafile)
-		if err != nil {
-			return nil, err
-		}
-		certpool := x509.NewCertPool()
-		certpool.AppendCertsFromPEM(cacert)
-
-		tlsConfig.RootCAs = certpool // RootCAs = certs used to verify server cert.
-	}
-
-	// Import certificate and the key
-	if certFile != "" && certKeyFile != "" {
-		kp, err := tls.LoadX509KeyPair(certFile, certKeyFile)
-		if err != nil {
-			return nil, err
-		}
-		tlsConfig.Certificates = []tls.Certificate{kp}
-	}
-
-	return tlsConfig, nil
-}
 
 func (mw *DTUMainWindow) Connect()  {
 	go func() {
@@ -485,177 +399,21 @@ func (mw *DTUMainWindow) ConnectConfig()  {
 	dlg.Run()
 }
 
-func (mw *DTUMainWindow) BuildUpData() (*packets.PushDataPacket,*lorawan.PHYPayload) {
-	now := time.Now().Round(time.Second)
-	compactTS := packets.CompactTime(now)
-	tmms := int64(time.Second / time.Millisecond)
-
-	var phy lorawan.PHYPayload
-	phy.MHDR.MType = lorawan.ConfirmedDataUp
-	phy.MHDR.Major = lorawan.LoRaWANR1
-	var mac lorawan.MACPayload
-	_ = mac.FHDR.DevAddr.UnmarshalText([]byte(mw.dtuConf.DevAddr))
-	_ = mac.FHDR.FCtrl.UnmarshalBinary([]byte{128})
-	mac.FHDR.FCnt = mw.dtuConf.FCnt
-	mac.FPort = &mw.dtuConf.FPort
-	var dataPayload lorawan.DataPayload
-	_ = dataPayload.UnmarshalBinary(true, mw.dtuConf.msg)
-	mac.FRMPayload = []lorawan.Payload{&dataPayload}
-	phy.MACPayload = &mac
-	var aseKey lorawan.AES128Key
-	_ = aseKey.UnmarshalText([]byte(mw.dtuConf.NwkSKey))
-	_ = phy.EncryptFRMPayload(aseKey)
-	sf :=[...]string{"SF12","SF11","SF10","SF9","SF8","SF7"}
-	var dr uint8 = 5
-	var ch uint8 = 2
-	_ = phy.SetUplinkDataMIC(lorawan.LoRaWAN1_0, 0, dr, ch, aseKey, aseKey)
-	data,_ := phy.MarshalBinary()
-	var gatewayMac lorawan.EUI64
-	_ = gatewayMac.UnmarshalText([]byte(mw.dtuConf.GatewayId))
-	return &packets.PushDataPacket{
-		ProtocolVersion: packets.ProtocolVersion2,
-		RandomToken:     uint16(rand.Uint32()),
-		GatewayMAC:      gatewayMac,
-		Payload: packets.PushDataPayload{
-			RXPK: []packets.RXPK{
-				{
-					Time: &compactTS,
-					Tmst: 708016819,
-					Tmms: &tmms,
-					Freq: mw.dtuConf.Freq,
-					Chan: ch,
-					RFCh: 1,
-					Stat: 1,
-					Modu: "LORA",
-					DatR: packets.DatR{LoRa: sf[dr]+"BW125"},
-					CodR: "4/5",
-					RSSI: -51,
-					LSNR: 7,
-					Size: uint16(len(data)),
-					Data: data,
-				},
-			},
-		},
-	},&phy
+func (mw *DTUMainWindow) BuildUpData() (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
+	var fCtrl lorawan.FCtrl
+	_ = fCtrl.UnmarshalBinary([]byte{128})
+	return BuildUpData(mw.dtuConf.GatewayId,mw.dtuConf.DevAddr,mw.dtuConf.NwkSKey,
+		mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
+		lorawan.UnconfirmedDataUp,fCtrl,-51,mw.dtuConf.msg)
 }
 
-func (mw *DTUMainWindow) BuildJoin() (*packets.PushDataPacket,*lorawan.PHYPayload) {
-	now := time.Now().Round(time.Second)
-	compactTS := packets.CompactTime(now)
-	tmms := int64(time.Second / time.Millisecond)
-	var phy lorawan.PHYPayload
-	phy.MHDR.MType = lorawan.JoinRequest
-	phy.MHDR.Major = lorawan.LoRaWANR1
-	var DevEUI lorawan.EUI64
-	_ = DevEUI.UnmarshalText([]byte(mw.dtuConf.DevEui))
+func (mw *DTUMainWindow) BuildJoin() (*packets.PushDataPacket,*lorawan.PHYPayload,error) {
 	mw.dtuConf.devNonce = lorawan.DevNonce(rand.Uint32())
-	phy.MACPayload =  &lorawan.JoinRequestPayload{
-		DevEUI:   DevEUI,
-		JoinEUI:  lorawan.EUI64{8, 7, 6, 5, 4, 3, 2, 1},
-		DevNonce: mw.dtuConf.devNonce,
-	}
-	var aseKey lorawan.AES128Key
-	_ = aseKey.UnmarshalText([]byte(mw.dtuConf.AppKey))
-	sf :=[...]string{"SF12","SF11","SF10","SF9","SF8","SF7"}
-	var dr uint8 = 5
-	var ch uint8 = 2
-	_ = phy.SetUplinkJoinMIC(aseKey)
-	data,_ := phy.MarshalBinary()
-	var gatewayMac lorawan.EUI64
-	_ = gatewayMac.UnmarshalText([]byte(mw.dtuConf.GatewayId))
-	return &packets.PushDataPacket{
-		ProtocolVersion: packets.ProtocolVersion2,
-		RandomToken:     uint16(rand.Uint32()),
-		GatewayMAC:      gatewayMac,
-		Payload: packets.PushDataPayload{
-			RXPK: []packets.RXPK{
-				{
-					Time: &compactTS,
-					Tmst: 708016819,
-					Tmms: &tmms,
-					Freq: mw.dtuConf.Freq,
-					Chan: ch,
-					RFCh: 1,
-					Stat: 1,
-					Modu: "LORA",
-					DatR: packets.DatR{LoRa: sf[dr]+"BW125"},
-					CodR: "4/5",
-					RSSI: -51,
-					LSNR: 7,
-					Size: uint16(len(data)),
-					Data: data,
-				},
-			},
-		},
-	},&phy
+	appEui := "0807060504030201"
+	return BuildJoin(mw.dtuConf.GatewayId,appEui,mw.dtuConf.DevEui,mw.dtuConf.AppKey,
+		5,2,mw.dtuConf.Freq,7,-51, mw.dtuConf.devNonce)
 }
 
-// getNwkSKey returns the network session key.
-func getNwkSKey(appkey lorawan.AES128Key, netID lorawan.NetID, joinNonce lorawan.JoinNonce, devNonce lorawan.DevNonce) (lorawan.AES128Key, error) {
-	return getSKey(0x01, appkey, netID, joinNonce, devNonce)
-}
-
-// getAppSKey returns the application session key.
-func getAppSKey(appkey lorawan.AES128Key, netID lorawan.NetID, joinNonce lorawan.JoinNonce, devNonce lorawan.DevNonce) (lorawan.AES128Key, error) {
-	return getSKey(0x02, appkey, netID, joinNonce, devNonce)
-}
-
-func getSKey(typ byte, nwkKey lorawan.AES128Key, netID lorawan.NetID,joinNonce lorawan.JoinNonce, devNonce lorawan.DevNonce) (lorawan.AES128Key, error) {
-	var key lorawan.AES128Key
-	b := make([]byte, 16)
-	b[0] = typ
-
-	netIDB, err := netID.MarshalBinary()
-	if err != nil {
-		return key, errors.Wrap(err, "marshal binary error")
-	}
-
-	joinNonceB, err := joinNonce.MarshalBinary()
-	if err != nil {
-		return key, errors.Wrap(err, "marshal binary error")
-	}
-
-	devNonceB, err := devNonce.MarshalBinary()
-	if err != nil {
-		return key, errors.Wrap(err, "marshal binary error")
-	}
-
-	copy(b[1:4], joinNonceB)
-	copy(b[4:7], netIDB)
-	copy(b[7:9], devNonceB)
-
-	block, err := aes.NewCipher(nwkKey[:])
-	if err != nil {
-		return key, err
-	}
-	if block.BlockSize() != len(b) {
-		return key, fmt.Errorf("block-size of %d bytes is expected", len(b))
-	}
-	block.Encrypt(key[:], b)
-
-	return key, nil
-}
-
-func MarshalFRMPayload(p *lorawan.MACPayload) ([]byte, error) {
-	var out []byte
-	var b []byte
-	var err error
-	for _, fp := range p.FRMPayload {
-		if mac, ok := fp.(*lorawan.MACCommand); ok {
-			if p.FPort == nil || (p.FPort != nil && *p.FPort != 0) {
-				return []byte{}, errors.New("lorawan: a MAC command is only allowed when FPort=0")
-			}
-			b, err = mac.MarshalBinary()
-		} else {
-			b, err = fp.MarshalBinary()
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b...)
-	}
-	return out, nil
-}
 
 func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 	var downlinkFrame gw.DownlinkFrame
@@ -677,11 +435,12 @@ func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 				var origData bytes.Buffer
 				jsonData,_ := phy.MarshalJSON()
 				_ = json.Indent(&origData, jsonData, "", "  ")
-				dd := &model.DTUDown{
-					Index: mw.downModel.Len() + 1,
+				dd := &DTU{
+					Index: mw.model.Len() + 1,
+					Direction:"downlink",
 					DevEUI: mw.dtuConf.DevEui,
-					MType: phy.MHDR.MType.String(),
 					DevAddr: mw.dtuConf.DevAddr,
+					MType: phy.MHDR.MType.String(),
 					GatewayID: hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
 					Time:time.Now().Format("2006-01-02 15:04:05"),
 					OrigData:origData.String(),
@@ -698,9 +457,9 @@ func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 						dd.HexData = hex.EncodeToString(p)
 					}
 				}
-				mw.downModel.Items = append(mw.downModel.Items, dd)
-				mw.downModel.PublishRowsReset()
-				_ = mw.downTv.SetSelectedIndexes([]int{})
+				mw.model.Items = append(mw.model.Items, dd)
+				mw.model.PublishRowsReset()
+				_ = mw.tv.SetSelectedIndexes([]int{})
 			}
 		}
 	}
@@ -759,12 +518,13 @@ func (mw *DTUMainWindow) PushData(gatewayEUI string,event string, msg proto.Mess
 
 func (mw *DTUMainWindow) Send(){
 	if mw.dtuConf.OTAA && mw.dtuConf.DevAddr == ""{
-		packet,phy := mw.BuildJoin()
+		packet,phy,_ := mw.BuildJoin()
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
-		du := &model.DTUUp{
-			Index:mw.upModel.Len() + 1,
+		du := &DTU{
+			Index:mw.model.Len() + 1,
+			Direction:"uplink",
 			DevEUI:mw.dtuConf.DevEui,
 			MType:phy.MHDR.MType.String(),
 			GatewayID:mw.dtuConf.GatewayId,
@@ -774,9 +534,9 @@ func (mw *DTUMainWindow) Send(){
 			Time:time.Now().Format("2006-01-02 15:04:05"),
 			OrigData:origData.String(),
 		}
-		mw.upModel.Items = append(mw.upModel.Items, du)
-		mw.upModel.PublishRowsReset()
-		_ = mw.upTv.SetSelectedIndexes([]int{})
+		mw.model.Items = append(mw.model.Items, du)
+		mw.model.PublishRowsReset()
+		_ = mw.tv.SetSelectedIndexes([]int{})
 		frames,_:= packet.GetUplinkFrames(true,false)
 		for j := range frames {
 			mw.PushData(mw.dtuConf.GatewayId,"up",&frames[j])
@@ -792,13 +552,15 @@ func (mw *DTUMainWindow) Send(){
 			return
 		}
 	}
-	packet,phy := mw.BuildUpData()
+	packet,phy,_ := mw.BuildUpData()
 	var origData bytes.Buffer
 	jsonData,_ := phy.MarshalJSON()
 	_ = json.Indent(&origData, jsonData, "", "  ")
-	du := &model.DTUUp{
-		Index:mw.upModel.Len() + 1,
+	du := &DTU{
+		Index:mw.model.Len() + 1,
+		Direction:"uplink",
 		DevEUI:mw.dtuConf.DevEui,
+		DevAddr:mw.dtuConf.DevAddr,
 		MType:phy.MHDR.MType.String(),
 		GatewayID:mw.dtuConf.GatewayId,
 		Rssi:packet.Payload.RXPK[0].RSSI,
@@ -811,9 +573,9 @@ func (mw *DTUMainWindow) Send(){
 		Time:time.Now().Format("2006-01-02 15:04:05"),
 		OrigData:origData.String(),
 	}
-	mw.upModel.Items = append(mw.upModel.Items, du)
-	mw.upModel.PublishRowsReset()
-	_ = mw.upTv.SetSelectedIndexes([]int{})
+	mw.model.Items = append(mw.model.Items, du)
+	mw.model.PublishRowsReset()
+	_ = mw.tv.SetSelectedIndexes([]int{})
 	frames,_:= packet.GetUplinkFrames(true,false)
 	for j := range frames {
 		mw.PushData(mw.dtuConf.GatewayId,"up",&frames[j])
@@ -825,18 +587,10 @@ func (mw *DTUMainWindow) Send(){
 	_ = ioutil.WriteFile(mw.dtuConfFileName,confData.Bytes(),0644)
 }
 
-func (mw *DTUMainWindow) upTvItemActivated() {
+func (mw *DTUMainWindow) tvItemActivated() {
 	msg := ""
-	for _, i := range mw.upTv.SelectedIndexes() {
-		msg += mw.upModel.Items[i].OrigData + "\n"
-	}
-	walk.MsgBox(mw, "原始数据", msg, walk.MsgBoxOK)
-}
-
-func (mw *DTUMainWindow) downTvItemActivated() {
-	msg := ""
-	for _, i := range mw.downTv.SelectedIndexes() {
-		msg += mw.downModel.Items[i].OrigData + "\n"
+	for _, i := range mw.tv.SelectedIndexes() {
+		msg += mw.model.Items[i].OrigData + "\n"
 	}
 	walk.MsgBox(mw, "原始数据", msg, walk.MsgBoxOK)
 }
