@@ -68,7 +68,8 @@ func main() {
 					PushButton{Text:"断开连接", AssignTo:&mw.disconnect, Enabled:false, OnClicked: mw.Disconnect},
 					CheckBox{Text:"开启SSL/TLS",AssignTo:&mw.ssl,OnClicked:mw.SSL},
 					PushButton{Text:"证书配置",Enabled:false,AssignTo:&mw.caConf,OnClicked: mw.ConnectConfig},
-					PushButton{Text:"终端配置",OnClicked: mw.MoteConfig},
+					PushButton{Text:"终端基本配置",OnClicked: mw.MoteConfig},
+					PushButton{Text:"终端高级配置",OnClicked: mw.MoteAdvancedConfig},
 					PushButton{Text:"清空数据",OnClicked: mw.Clean},
 				},
 			},
@@ -163,6 +164,7 @@ func main() {
 		_ = mw.username.SetText(mw.connConf.Username)
 		_ = mw.password.SetText(mw.connConf.Password)
 	}
+	mw.currentMoteConf.AppEui = "0102030405060708"
 	mw.moteConfFileName = dir + "/LoRaMoteConf.json"
 	mw.motesConf.Configs = make(map[string]MoteConfig)
 	data, err = ioutil.ReadFile(mw.moteConfFileName)
@@ -256,12 +258,12 @@ func (mw *MoteMainWindow) Disconnect()  {
 	mw.mqttClient.Disconnect(0)
 }
 
-func (mw *MoteMainWindow) MoteConfig()  {
+func (mw *MoteMainWindow) MoteConfig() {
 	var dlg *walk.Dialog
 	var name *walk.ComboBox
 	var otaa *walk.CheckBox
 	var gatewayId,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
-	var fPort,fCnt,freq *walk.NumberEdit
+	var fCnt *walk.NumberEdit
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
 		Title: "终端配置",
@@ -286,9 +288,7 @@ func (mw *MoteMainWindow) MoteConfig()  {
 						_ = appKey.SetText(mw.currentMoteConf.AppKey)
 						_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
 						_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
-						_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
 						_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
-						_ = freq.SetValue(mw.currentMoteConf.Freq)
 
 					}},
 					Label{Text:"入网方式:"},
@@ -318,12 +318,8 @@ func (mw *MoteMainWindow) MoteConfig()  {
 					LineEdit{AssignTo:&nwkSKey},
 					Label{Text:"应用会话秘钥:"},
 					LineEdit{AssignTo:&appSKey},
-					Label{Text:"端口:"},
-					NumberEdit{AssignTo:&fPort},
-					Label{Text:"计数:"},
+					Label{Text:"上行计数:"},
 					NumberEdit{AssignTo:&fCnt},
-					Label{Text:"频率:"},
-					NumberEdit{AssignTo:&freq,Decimals:2},
 				},
 			},
 			Composite{
@@ -341,9 +337,7 @@ func (mw *MoteMainWindow) MoteConfig()  {
 							mw.currentMoteConf.AppKey = appKey.Text()
 							mw.currentMoteConf.AppSKey = appSKey.Text()
 							mw.currentMoteConf.NwkSKey = nwkSKey.Text()
-							mw.currentMoteConf.FPort = uint8(fPort.Value())
 							mw.currentMoteConf.FCnt = uint32(fCnt.Value())
-							mw.currentMoteConf.Freq = freq.Value()
 							mw.motesConf.Current = name.Text()
 							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
 
@@ -376,17 +370,127 @@ func (mw *MoteMainWindow) MoteConfig()  {
 	_ = appKey.SetText(mw.currentMoteConf.AppKey)
 	_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
 	_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
-	_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
 	_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
-	_ = freq.SetValue(mw.currentMoteConf.Freq)
 
 	dlg.Run()
 }
+
+func (mw *MoteMainWindow) MoteAdvancedConfig()  {
+	var dlg *walk.Dialog
+	var mType,sf *walk.ComboBox
+	var fPort,freq,ch,lsnr,rssi *walk.NumberEdit
+	var adr,req,ack,fPending,classB *walk.CheckBox
+	var acceptPB, cancelPB *walk.PushButton
+	_ = Dialog{
+		Title: "终端高级配置",
+		//Icon: mw.icon,
+		Layout:   VBox{},
+		AssignTo: &dlg,
+		DefaultButton: &acceptPB,
+		CancelButton:  &cancelPB,
+		MinSize: Size{400, 200},
+		Children: []Widget{
+			Composite{
+				Layout:Grid{Columns: 2},
+				Children:[]Widget{
+					Label{Text:"消息类型:"},
+					ComboBox{AssignTo:&mType,Model:[]string{"UnconfirmedDataUp","ConfirmedDataUp"},Value:"UnconfirmedDataUp"},
+					Label{Text:"扩频因子:"},
+					ComboBox{AssignTo:&sf,Model:[]string{"SF12","SF11","SF10","SF9","SF8","SF7"},Value:"SF12"},
+					Label{Text:"端口:"},
+					NumberEdit{AssignTo:&fPort,Value:1.0},
+					Label{Text:"频率:"},
+					NumberEdit{AssignTo:&freq,Decimals:2,Value:470.3},
+					Label{Text:"信道:"},
+					NumberEdit{AssignTo:&ch,Value:0},
+					Label{Text:"信号强度:"},
+					NumberEdit{AssignTo:&rssi,Value:-50.0},
+					Label{Text:"信噪比:"},
+					NumberEdit{AssignTo:&lsnr,Value:7.0},
+
+					CheckBox{AssignTo:&adr,Text:"adr",Checked:true},
+					CheckBox{AssignTo:&req,Text:"req"},
+					CheckBox{AssignTo:&ack,Text:"ack"},
+					CheckBox{AssignTo:&fPending,Text:"fPending"},
+					CheckBox{AssignTo:&classB,Text:"classB"},
+				},
+			},
+			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					HSpacer{},
+					PushButton{
+						AssignTo: &acceptPB,
+						Text:     "确定",
+						OnClicked: func() {
+							if mw.motesConf.Current == "" {
+								msg := "请先配置终端基础配置"
+								walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+								return
+							}
+							switch mType.CurrentIndex() {
+							case 0:
+								mw.currentMoteConf.MType = uint8(lorawan.UnconfirmedDataUp)
+							case 1:
+								mw.currentMoteConf.MType = uint8(lorawan.ConfirmedDataUp)
+							}
+							mw.currentMoteConf.DR = uint8(sf.CurrentIndex())
+							mw.currentMoteConf.FPort = uint8(fPort.Value())
+							mw.currentMoteConf.Freq = freq.Value()
+							mw.currentMoteConf.Chan = uint8(ch.Value())
+							mw.currentMoteConf.RSSI = int16(rssi.Value())
+							mw.currentMoteConf.LSNR = lsnr.Value()
+							mw.currentMoteConf.FCtrl.ADR = adr.Checked()
+							mw.currentMoteConf.FCtrl.ADRACKReq = req.Checked()
+							mw.currentMoteConf.FCtrl.ACK = ack.Checked()
+							mw.currentMoteConf.FCtrl.FPending = fPending.Checked()
+							mw.currentMoteConf.FCtrl.ClassB = classB.Checked()
+
+							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
+
+							var confData bytes.Buffer
+							d,_  := json.Marshal(&mw.motesConf)
+							_ = json.Indent(&confData, d, "", "\t")
+							_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
+							dlg.Accept()
+						},
+					},
+					PushButton{
+						AssignTo:  &cancelPB,
+						Text:      "取消",
+						OnClicked: func() { dlg.Cancel() },
+					},
+				},
+			},
+		},
+	}.Create(mw)
+	switch lorawan.MType(mw.currentMoteConf.MType) {
+	case lorawan.UnconfirmedDataUp:
+		_ = mType.SetCurrentIndex(0)
+	case lorawan.ConfirmedDataUp:
+		_ = mType.SetCurrentIndex(1)
+	}
+	_ = sf.SetCurrentIndex(int(mw.currentMoteConf.DR))
+	_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
+	_ = freq.SetValue(mw.currentMoteConf.Freq)
+	_ = ch.SetValue(float64(mw.currentMoteConf.Chan))
+	_ = rssi.SetValue(float64(mw.currentMoteConf.RSSI))
+	_ = lsnr.SetValue(mw.currentMoteConf.LSNR)
+	adr.SetChecked(mw.currentMoteConf.FCtrl.ADR)
+	req.SetChecked(mw.currentMoteConf.FCtrl.ADRACKReq)
+	ack.SetChecked(mw.currentMoteConf.FCtrl.ACK )
+	fPending.SetChecked(mw.currentMoteConf.FCtrl.FPending )
+	classB.SetChecked(mw.currentMoteConf.FCtrl.ClassB)
+
+	dlg.Run()
+}
+
 func (mw *MoteMainWindow) Clean()  {
 	mw.model.Items = []*Mote{}
 	mw.model.PublishRowsReset()
 	_ = mw.tv.SetSelectedIndexes([]int{})
 }
+
 func (mw *MoteMainWindow) SSL()  {
 	if mw.ssl.Checked() {
 		mw.caConf.SetEnabled(true)
@@ -594,13 +698,19 @@ func (mw *MoteMainWindow) sendMsg() error{
 	if mw.mqttClient == nil || !mw.mqttClient.IsConnected() {
 		msg := "请先连接服务器"
 		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
-		return errors.New("请先连接服务器")
+		return errors.New(msg)
 	}
 	if mw.currentMoteConf.OTAA && mw.currentMoteConf.DevAddr == ""{
 		mw.currentMoteConf.devNonce = lorawan.DevNonce(rand.Uint32())
-		appEui := "0807060504030201"
-		packet,phy,_ := BuildJoin(mw.currentMoteConf.GatewayId,appEui,mw.currentMoteConf.DevEui,mw.currentMoteConf.AppKey,
-			5,2,mw.currentMoteConf.Freq,7,-51, mw.currentMoteConf.devNonce)
+		packet,phy,err := BuildJoin(mw.currentMoteConf.GatewayId,mw.currentMoteConf.AppEui,
+			mw.currentMoteConf.DevEui,mw.currentMoteConf.AppKey,mw.currentMoteConf.DR,
+			mw.currentMoteConf.Chan,mw.currentMoteConf.Freq,mw.currentMoteConf.LSNR,
+			mw.currentMoteConf.RSSI, mw.currentMoteConf.devNonce)
+		if err != nil {
+			msg := "构建入网包错误:" + err.Error()
+			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+			return err
+		}
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
@@ -646,16 +756,19 @@ func (mw *MoteMainWindow) sendMsg() error{
 			return err
 		}
 	}
-	var fCtrl lorawan.FCtrl
-	_ = fCtrl.UnmarshalBinary([]byte{128})
 	key := mw.currentMoteConf.AppSKey
 	if mw.currentMoteConf.FPort == 0 {
 		key = mw.currentMoteConf.NwkSKey
 	}
-	packet,phy,_ := BuildUpData(mw.currentMoteConf.GatewayId,mw.currentMoteConf.DevAddr,key,
-		mw.currentMoteConf.NwkSKey,mw.currentMoteConf.FCnt,mw.currentMoteConf.FPort,5,2,mw.currentMoteConf.Freq,7,
-		lorawan.UnconfirmedDataUp,fCtrl,-51,bmsg)
-
+	packet,phy,err := BuildUpData(mw.currentMoteConf.GatewayId,mw.currentMoteConf.DevAddr,key,
+		mw.currentMoteConf.NwkSKey,mw.currentMoteConf.FCnt,mw.currentMoteConf.FPort,
+		mw.currentMoteConf.DR,mw.currentMoteConf.Chan,mw.currentMoteConf.Freq,mw.currentMoteConf.LSNR,
+		lorawan.MType(mw.currentMoteConf.MType),mw.currentMoteConf.FCtrl,mw.currentMoteConf.RSSI,bmsg)
+	if err != nil {
+		msg := "构建上行包错误:" + err.Error()
+		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+		return err
+	}
 	var origData bytes.Buffer
 	jsonData,_ := phy.MarshalJSON()
 	_ = json.Indent(&origData, jsonData, "", "  ")

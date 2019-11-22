@@ -19,14 +19,21 @@ type ConnectConfig struct {
 type MoteConfig struct {
 	OTAA      bool 		`json:"otaa"`
 	GatewayId string	`json:"gatewayId"`
+	AppEui	  string 	`json:"appEui"`
 	DevEui    string	`json:"devEui"`
 	DevAddr   string	`json:"devAddr"`
 	AppKey    string	`json:"appKey"`
 	NwkSKey   string	`json:"nwkSKey"`
 	AppSKey   string	`json:"appSKey"`
-	FPort     uint8		`json:"fPort"`
 	FCnt      uint32	`json:"fCnt"`
+	FPort     uint8		`json:"fPort"`
 	Freq      float64	`json:"freq"`
+	DR  	  uint8 	`json:"dr"`
+	Chan  	  uint8		`json:"chan"`
+	LSNR 	  float64	`json:"lsnr"`
+	RSSI 	  int16 	`json:"rssi"`
+	MType	  uint8 	`json:"mType"`
+	FCtrl     lorawan.FCtrl `json:"fCtrl"`
 	devNonce  lorawan.DevNonce
 }
 
