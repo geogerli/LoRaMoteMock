@@ -262,7 +262,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 	var dlg *walk.Dialog
 	var name *walk.ComboBox
 	var otaa *walk.CheckBox
-	var gatewayId,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
+	var gatewayId,appEUI,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
 	var fCnt *walk.NumberEdit
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
@@ -308,6 +308,8 @@ func (mw *MoteMainWindow) MoteConfig() {
 					}},
 					Label{Text:"网关ID:"},
 					LineEdit{AssignTo:&gatewayId},
+					Label{Text:"应用EUI:"},
+					LineEdit{AssignTo:&appEUI,Text:"0102030405060708"},
 					Label{Text:"终端EUI:"},
 					LineEdit{AssignTo:&devEUI},
 					Label{Text:"终端地址:"},
@@ -332,6 +334,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 						OnClicked: func() {
 							mw.currentMoteConf.OTAA = otaa.Checked()
 							mw.currentMoteConf.GatewayId = gatewayId.Text()
+							mw.currentMoteConf.AppEui = appEUI.Text()
 							mw.currentMoteConf.DevEui = devEUI.Text()
 							mw.currentMoteConf.DevAddr = devAddr.Text()
 							mw.currentMoteConf.AppKey = appKey.Text()
@@ -365,6 +368,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 	_ = name.SetText(mw.motesConf.Current)
 	otaa.SetChecked(mw.currentMoteConf.OTAA)
 	_ = gatewayId.SetText(mw.currentMoteConf.GatewayId)
+	_ = appEUI.SetText(mw.currentMoteConf.AppEui)
 	_ = devEUI.SetText(mw.currentMoteConf.DevEui)
 	_ = devAddr.SetText(mw.currentMoteConf.DevAddr)
 	_ = appKey.SetText(mw.currentMoteConf.AppKey)

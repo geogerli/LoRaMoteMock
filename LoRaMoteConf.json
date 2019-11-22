@@ -1,16 +1,16 @@
 {
-	"current": "mote2",
+	"current": "mote1",
 	"configs": {
 		"mote1": {
 			"otaa": true,
 			"gatewayId": "0102030405060708",
-			"appEui": "",
+			"appEui": "0102030405060708",
 			"devEui": "b92fd5d497cfcdbd",
 			"devAddr": "00530747",
 			"appKey": "fe80c1f94e6cc62d5d6f72630b43c177",
 			"nwkSKey": "4f862983a453cc50336284fd3c62aba5",
 			"appSKey": "2bc9217655160b2c1229b5ecb469242f",
-			"fCnt": 511,
+			"fCnt": 513,
 			"fPort": 1,
 			"freq": 470.3,
 			"dr": 0,
@@ -29,7 +29,7 @@
 		"mote2": {
 			"otaa": false,
 			"gatewayId": "0102030405060708",
-			"appEui": "",
+			"appEui": "0102030405060708",
 			"devEui": "6ef1881ba5541419",
 			"devAddr": "00c18699",
 			"appKey": "",
