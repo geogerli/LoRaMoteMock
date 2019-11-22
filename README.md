@@ -1,2 +1,2 @@
-# LoRaDTUMock
+# LoRaMoteMock
 
