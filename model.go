@@ -30,6 +30,12 @@ type MoteConfig struct {
 	devNonce  lorawan.DevNonce
 }
 
+type MotesConfig struct {
+	Current 	string	`json:"current"`
+	Configs 	map[string]MoteConfig `json:"configs"`
+}
+
+
 type Mote struct {
 	Index   int
 	Direction string
@@ -128,14 +134,22 @@ func (m *MoteModel) Less(i, j int) bool {
 	switch m.SortColumn {
 	case 0:
 		return c(a.Index < b.Index)
+	case 1:
+		return c(a.Direction < b.Direction)
 	case 2:
 		return c(a.DevEUI < b.DevEUI)
+	case 3:
+		return c(a.DevAddr < b.DevAddr)
 	case 4:
-		return c(a.Rssi < b.Rssi)
+		return c(a.MType < b.MType)
 	case 5:
-		return c(a.LoRaSNR < b.LoRaSNR)
-	case 6:
-		return c(a.Frequency < b.Frequency)
+		return c(a.GatewayID < b.GatewayID)
+	case 9:
+		return c(a.FCnt < b.FCnt)
+	case 10:
+		return c(a.FPort < b.FPort)
+	case 13:
+		return c(a.Time < b.Time)
 	default:
 		return false
 	}

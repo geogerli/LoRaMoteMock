@@ -34,10 +34,11 @@ type MoteMainWindow struct {
 	msg,data                        *walk.TextEdit
 	ssl,timeSend                    *walk.CheckBox
 	connConf                        ConnectConfig
-	moteConf                        MoteConfig
+	motesConf                       MotesConfig
+	currentMoteConf                 MoteConfig
 	connConfFileName                string
 	moteConfFileName                string
-	icon 							*walk.Icon
+	icon                            *walk.Icon
 }
 
 func main() {
@@ -163,14 +164,16 @@ func main() {
 		_ = mw.password.SetText(mw.connConf.Password)
 	}
 	mw.moteConfFileName = dir + "/LoRaMoteConf.json"
+	mw.motesConf.Configs = make(map[string]MoteConfig)
 	data, err = ioutil.ReadFile(mw.moteConfFileName)
 	if err == nil {
-		err = json.Unmarshal(data, &mw.moteConf)
+		err = json.Unmarshal(data, &mw.motesConf)
 		if err != nil {
 			msg := "配置文件格式错误:" + err.Error()
 			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 			return
 		}
+		mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
 	}
 	mw.Run()
 }
@@ -250,6 +253,7 @@ func (mw *MoteMainWindow) Disconnect()  {
 
 func (mw *MoteMainWindow) MoteConfig()  {
 	var dlg *walk.Dialog
+	var name *walk.ComboBox
 	var otaa *walk.CheckBox
 	var gatewayId,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
 	var fPort,fCnt,freq *walk.NumberEdit
@@ -266,6 +270,22 @@ func (mw *MoteMainWindow) MoteConfig()  {
 			Composite{
 				Layout:Grid{Columns: 2},
 				Children:[]Widget{
+					Label{Text: "终端名称:"},
+					ComboBox{AssignTo: &name,Editable: true,OnCurrentIndexChanged: func() {
+						mw.motesConf.Current = name.Text()
+						mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
+						otaa.SetChecked(mw.currentMoteConf.OTAA)
+						_ = gatewayId.SetText(mw.currentMoteConf.GatewayId)
+						_ = devEUI.SetText(mw.currentMoteConf.DevEui)
+						_ = devAddr.SetText(mw.currentMoteConf.DevAddr)
+						_ = appKey.SetText(mw.currentMoteConf.AppKey)
+						_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
+						_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
+						_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
+						_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
+						_ = freq.SetValue(mw.currentMoteConf.Freq)
+
+					}},
 					Label{Text:"入网方式:"},
 					CheckBox{AssignTo: &otaa,Text:"OTAA入网",OnClicked: func() {
 						if otaa.Checked() {
@@ -309,19 +329,21 @@ func (mw *MoteMainWindow) MoteConfig()  {
 						AssignTo: &acceptPB,
 						Text:     "确定",
 						OnClicked: func() {
-							mw.moteConf.OTAA = otaa.Checked()
-							mw.moteConf.GatewayId = gatewayId.Text()
-							mw.moteConf.DevEui = devEUI.Text()
-							mw.moteConf.DevAddr = devAddr.Text()
-							mw.moteConf.AppKey = appKey.Text()
-							mw.moteConf.AppSKey = appSKey.Text()
-							mw.moteConf.NwkSKey = nwkSKey.Text()
-							mw.moteConf.FPort = uint8(fPort.Value())
-							mw.moteConf.FCnt = uint32(fCnt.Value())
-							mw.moteConf.Freq = freq.Value()
+							mw.currentMoteConf.OTAA = otaa.Checked()
+							mw.currentMoteConf.GatewayId = gatewayId.Text()
+							mw.currentMoteConf.DevEui = devEUI.Text()
+							mw.currentMoteConf.DevAddr = devAddr.Text()
+							mw.currentMoteConf.AppKey = appKey.Text()
+							mw.currentMoteConf.AppSKey = appSKey.Text()
+							mw.currentMoteConf.NwkSKey = nwkSKey.Text()
+							mw.currentMoteConf.FPort = uint8(fPort.Value())
+							mw.currentMoteConf.FCnt = uint32(fCnt.Value())
+							mw.currentMoteConf.Freq = freq.Value()
+							mw.motesConf.Current = name.Text()
+							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
 
 							var confData bytes.Buffer
-							d,_  := json.Marshal(&mw.moteConf)
+							d,_  := json.Marshal(&mw.motesConf)
 							_ = json.Indent(&confData, d, "", "\t")
 							_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 							dlg.Accept()
@@ -336,17 +358,22 @@ func (mw *MoteMainWindow) MoteConfig()  {
 			},
 		},
 	}.Create(mw)
-
-	otaa.SetChecked(mw.moteConf.OTAA)
-	_ = gatewayId.SetText(mw.moteConf.GatewayId)
-	_ = devEUI.SetText(mw.moteConf.DevEui)
-	_ = devAddr.SetText(mw.moteConf.DevAddr)
-	_ = appKey.SetText(mw.moteConf.AppKey)
-	_ = appSKey.SetText(mw.moteConf.AppSKey)
-	_ = nwkSKey.SetText(mw.moteConf.NwkSKey)
-	_ = fPort.SetValue(float64(mw.moteConf.FPort))
-	_ = fCnt.SetValue(float64(mw.moteConf.FCnt))
-	_ = freq.SetValue(mw.moteConf.Freq)
+	var names []string
+	for k,_ := range mw.motesConf.Configs {
+		names = append(names,k)
+	}
+	_ = name.SetModel(names)
+	_ = name.SetText(mw.motesConf.Current)
+	otaa.SetChecked(mw.currentMoteConf.OTAA)
+	_ = gatewayId.SetText(mw.currentMoteConf.GatewayId)
+	_ = devEUI.SetText(mw.currentMoteConf.DevEui)
+	_ = devAddr.SetText(mw.currentMoteConf.DevAddr)
+	_ = appKey.SetText(mw.currentMoteConf.AppKey)
+	_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
+	_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
+	_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
+	_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
+	_ = freq.SetValue(mw.currentMoteConf.Freq)
 
 	dlg.Run()
 }
@@ -472,8 +499,8 @@ func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 				dd := &Mote{
 					Index: mw.model.Len() + 1,
 					Direction:"downlink",
-					DevEUI: mw.moteConf.DevEui,
-					DevAddr: mw.moteConf.DevAddr,
+					DevEUI: mw.currentMoteConf.DevEui,
+					DevAddr: mw.currentMoteConf.DevAddr,
 					MType: phy.MHDR.MType.String(),
 					GatewayID: hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
 					Time:time.Now().Format("2006-01-02 15:04:05"),
@@ -500,7 +527,7 @@ func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 }
 
 func (mw *MoteMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
-	key := mw.moteConf.AppKey
+	key := mw.currentMoteConf.AppKey
 	var aseKey lorawan.AES128Key
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptJoinAcceptPayload(aseKey)
@@ -511,32 +538,32 @@ func (mw *MoteMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
 	if !ok {
 		fmt.Println("lorawan: MACPayload must be of type *JoinAcceptPayload")
 	}
-	mw.moteConf.DevAddr = jap.DevAddr.String()
-	dn := mw.moteConf.devNonce
+	mw.currentMoteConf.DevAddr = jap.DevAddr.String()
+	dn := mw.currentMoteConf.devNonce
 	appSKey,err := getAppSKey(aseKey,jap.HomeNetID,jap.JoinNonce,dn)
 	if err == nil {
-		mw.moteConf.AppSKey = appSKey.String()
-		fmt.Println(mw.moteConf.AppSKey)
+		mw.currentMoteConf.AppSKey = appSKey.String()
+		fmt.Println(mw.currentMoteConf.AppSKey)
 	}
 	nwkSKey,err := getNwkSKey(aseKey,jap.HomeNetID,jap.JoinNonce,dn)
 	if err == nil {
-		mw.moteConf.NwkSKey = nwkSKey.String()
-		fmt.Println(mw.moteConf.NwkSKey)
+		mw.currentMoteConf.NwkSKey = nwkSKey.String()
+		fmt.Println(mw.currentMoteConf.NwkSKey)
 	}
 }
 
 func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
 	mpl := phy.MACPayload.(*lorawan.MACPayload)
-	key := mw.moteConf.AppSKey
+	key := mw.currentMoteConf.AppSKey
 	if mpl.FPort != nil && *mpl.FPort == 0 {
-		key = mw.moteConf.NwkSKey
+		key = mw.currentMoteConf.NwkSKey
 	}
 
 	var aseKey lorawan.AES128Key
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptFRMPayload(aseKey)
 	if err == nil {
-		mw.moteConf.DevAddr = mpl.FHDR.DevAddr.String()
+		mw.currentMoteConf.DevAddr = mpl.FHDR.DevAddr.String()
 	}
 }
 
@@ -559,20 +586,20 @@ func (mw *MoteMainWindow) sendMsg() error{
 		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 		return errors.New("请先连接服务器")
 	}
-	if mw.moteConf.OTAA && mw.moteConf.DevAddr == ""{
-		mw.moteConf.devNonce = lorawan.DevNonce(rand.Uint32())
+	if mw.currentMoteConf.OTAA && mw.currentMoteConf.DevAddr == ""{
+		mw.currentMoteConf.devNonce = lorawan.DevNonce(rand.Uint32())
 		appEui := "0807060504030201"
-		packet,phy,_ := BuildJoin(mw.moteConf.GatewayId,appEui,mw.moteConf.DevEui,mw.moteConf.AppKey,
-			5,2,mw.moteConf.Freq,7,-51, mw.moteConf.devNonce)
+		packet,phy,_ := BuildJoin(mw.currentMoteConf.GatewayId,appEui,mw.currentMoteConf.DevEui,mw.currentMoteConf.AppKey,
+			5,2,mw.currentMoteConf.Freq,7,-51, mw.currentMoteConf.devNonce)
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
 		du := &Mote{
 			Index:mw.model.Len() + 1,
 			Direction:"uplink",
-			DevEUI:mw.moteConf.DevEui,
+			DevEUI:mw.currentMoteConf.DevEui,
 			MType:phy.MHDR.MType.String(),
-			GatewayID:mw.moteConf.GatewayId,
+			GatewayID:mw.currentMoteConf.GatewayId,
 			Rssi:packet.Payload.RXPK[0].RSSI,
 			LoRaSNR:packet.Payload.RXPK[0].LSNR,
 			Frequency:packet.Payload.RXPK[0].Freq,
@@ -584,13 +611,13 @@ func (mw *MoteMainWindow) sendMsg() error{
 		_ = mw.tv.SetSelectedIndexes([]int{})
 		frames,_:= packet.GetUplinkFrames(true,false)
 		for j := range frames {
-			mw.PushData(mw.moteConf.GatewayId,"up",&frames[j])
+			mw.PushData(mw.currentMoteConf.GatewayId,"up",&frames[j])
 		}
 		fmt.Println("push join ")
-		for cnt := 0;mw.moteConf.DevAddr == "" && cnt < 5;cnt ++ {
+		for cnt := 0;mw.currentMoteConf.DevAddr == "" && cnt < 5;cnt ++ {
 			time.Sleep(time.Second)
 		}
-		if mw.moteConf.DevAddr != "" {
+		if mw.currentMoteConf.DevAddr != "" {
 			fmt.Println("join ok")
 		}else{
 			fmt.Println("join failed")
@@ -611,12 +638,12 @@ func (mw *MoteMainWindow) sendMsg() error{
 	}
 	var fCtrl lorawan.FCtrl
 	_ = fCtrl.UnmarshalBinary([]byte{128})
-	key := mw.moteConf.AppSKey
-	if mw.moteConf.FPort == 0 {
-		key = mw.moteConf.NwkSKey
+	key := mw.currentMoteConf.AppSKey
+	if mw.currentMoteConf.FPort == 0 {
+		key = mw.currentMoteConf.NwkSKey
 	}
-	packet,phy,_ := BuildUpData(mw.moteConf.GatewayId,mw.moteConf.DevAddr,key,
-		mw.moteConf.NwkSKey,mw.moteConf.FCnt,mw.moteConf.FPort,5,2,mw.moteConf.Freq,7,
+	packet,phy,_ := BuildUpData(mw.currentMoteConf.GatewayId,mw.currentMoteConf.DevAddr,key,
+		mw.currentMoteConf.NwkSKey,mw.currentMoteConf.FCnt,mw.currentMoteConf.FPort,5,2,mw.currentMoteConf.Freq,7,
 		lorawan.UnconfirmedDataUp,fCtrl,-51,bmsg)
 
 	var origData bytes.Buffer
@@ -625,15 +652,15 @@ func (mw *MoteMainWindow) sendMsg() error{
 	du := &Mote{
 		Index:mw.model.Len() + 1,
 		Direction:"uplink",
-		DevEUI:mw.moteConf.DevEui,
-		DevAddr:mw.moteConf.DevAddr,
+		DevEUI:mw.currentMoteConf.DevEui,
+		DevAddr:mw.currentMoteConf.DevAddr,
 		MType:phy.MHDR.MType.String(),
-		GatewayID:mw.moteConf.GatewayId,
+		GatewayID:mw.currentMoteConf.GatewayId,
 		Rssi:packet.Payload.RXPK[0].RSSI,
 		LoRaSNR:packet.Payload.RXPK[0].LSNR,
 		Frequency:packet.Payload.RXPK[0].Freq,
-		FCnt:mw.moteConf.FCnt,
-		FPort:mw.moteConf.FPort,
+		FCnt:mw.currentMoteConf.FCnt,
+		FPort:mw.currentMoteConf.FPort,
 		HexData:hex.EncodeToString(bmsg),
 		AsciiData:BytesToString(bmsg),
 		Time:time.Now().Format("2006-01-02 15:04:05"),
@@ -644,11 +671,11 @@ func (mw *MoteMainWindow) sendMsg() error{
 	_ = mw.tv.SetSelectedIndexes([]int{})
 	frames,_:= packet.GetUplinkFrames(true,false)
 	for j := range frames {
-		mw.PushData(mw.moteConf.GatewayId,"up",&frames[j])
+		mw.PushData(mw.currentMoteConf.GatewayId,"up",&frames[j])
 	}
-	mw.moteConf.FCnt ++
+	mw.currentMoteConf.FCnt ++
 	var confData bytes.Buffer
-	d,_  := json.Marshal(&mw.moteConf)
+	d,_  := json.Marshal(&mw.currentMoteConf)
 	_ = json.Indent(&confData, d, "", "\t")
 	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 	return nil
