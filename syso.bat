@@ -1,1 +1,1 @@
-rsrc -manifest LoRaDTUMock.manifest -ico dot.ico -o rsrc.syso
+rsrc -manifest LoRaMoteMock.manifest -ico LoRaMoteMock.ico,dot.ico -o rsrc.syso

@@ -62,7 +62,7 @@ func (d *Node) ChildAt(index int) walk.TreeItem {
 }
 
 func (d *Node) Image() interface{} {
-	icon,err := walk.NewIconFromResourceId(3)
+	icon,err := walk.NewIconFromResourceId(5)
 	if err != nil {
 		return ""
 	}

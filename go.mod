@@ -1,4 +1,4 @@
-module LoRaDTUMock
+module LoRaMoteMock
 
 go 1.12
 

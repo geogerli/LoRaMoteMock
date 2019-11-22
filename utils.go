@@ -1,7 +1,7 @@
 package main
 
 import (
-	"LoRaDTUMock/packets"
+	"LoRaMoteMock/packets"
 	"crypto/aes"
 	"crypto/tls"
 	"crypto/x509"

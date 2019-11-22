@@ -16,7 +16,7 @@ type ConnectConfig struct {
 	TLSKey string `json:"tls_key"`
 }
 
-type DTUConfig struct {
+type MoteConfig struct {
 	OTAA      bool 		`json:"otaa"`
 	GatewayId string	`json:"gatewayId"`
 	DevEui    string	`json:"devEui"`
@@ -30,7 +30,7 @@ type DTUConfig struct {
 	devNonce  lorawan.DevNonce
 }
 
-type DTU struct {
+type Mote struct {
 	Index   int
 	Direction string
 	DevEUI   string
@@ -49,19 +49,19 @@ type DTU struct {
 	OrigData string
 }
 
-type DTUModel struct {
+type MoteModel struct {
 	walk.TableModelBase
 	walk.SorterBase
 	SortColumn int
 	SortOrder  walk.SortOrder
-	Items      []*DTU
+	Items      []*Mote
 }
 
-func (m *DTUModel) RowCount() int {
+func (m *MoteModel) RowCount() int {
 	return len(m.Items)
 }
 
-func (m *DTUModel) Value(row, col int) interface{} {
+func (m *MoteModel) Value(row, col int) interface{} {
 	item := m.Items[row]
 
 	switch col {
@@ -97,26 +97,26 @@ func (m *DTUModel) Value(row, col int) interface{} {
 	panic("unexpected col")
 }
 
-func (m *DTUModel) Checked(row int) bool {
+func (m *MoteModel) Checked(row int) bool {
 	return m.Items[row].checked
 }
 
-func (m *DTUModel) SetChecked(row int, checked bool) error {
+func (m *MoteModel) SetChecked(row int, checked bool) error {
 	m.Items[row].checked = checked
 	return nil
 }
 
-func (m *DTUModel) Sort(col int, order walk.SortOrder) error {
+func (m *MoteModel) Sort(col int, order walk.SortOrder) error {
 	m.SortColumn, m.SortOrder = col, order
 	sort.Stable(m)
 	return m.SorterBase.Sort(col, order)
 }
 
-func (m *DTUModel) Len() int {
+func (m *MoteModel) Len() int {
 	return len(m.Items)
 }
 
-func (m *DTUModel) Less(i, j int) bool {
+func (m *MoteModel) Less(i, j int) bool {
 	a, b := m.Items[i], m.Items[j]
 	c := func(ls bool) bool {
 		if m.SortOrder == walk.SortAscending {
@@ -141,10 +141,10 @@ func (m *DTUModel) Less(i, j int) bool {
 	}
 }
 
-func (m *DTUModel) Swap(i, j int) {
+func (m *MoteModel) Swap(i, j int) {
 	m.Items[i], m.Items[j] = m.Items[j], m.Items[i]
 }
 
-func NewDTUModel() *DTUModel {
-	return new(DTUModel)
+func NewMoteModel() *MoteModel {
+	return new(MoteModel)
 }

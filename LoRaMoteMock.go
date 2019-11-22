@@ -1,7 +1,7 @@
 package main
 
 import (
-	"LoRaDTUMock/packets"
+	"LoRaMoteMock/packets"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
@@ -21,32 +21,34 @@ import (
 	"time"
 )
 
-type DTUMainWindow struct {
+type MoteMainWindow struct {
 	*walk.MainWindow
-	mqttClient 							paho.Client
-	model                             	*DTUModel
-	tv                        			*walk.TableView
-	jsonView 							*walk.TreeView
-	host,username,password 				*walk.LineEdit
-	port,sendInterval             		*walk.NumberEdit
-	connect, disconnect,caConf,send     *walk.PushButton
-	ascii,noAscii 						*walk.RadioButton
-	msg,data                        	*walk.TextEdit
-	ssl,timeSend               			*walk.CheckBox
-	connConf                            ConnectConfig
-	dtuConf 							DTUConfig
-	connConfFileName 					string
-	dtuConfFileName						string
+	mqttClient                      paho.Client
+	model                           *MoteModel
+	tv                              *walk.TableView
+	jsonView                        *walk.TreeView
+	host,username,password          *walk.LineEdit
+	port,sendInterval               *walk.NumberEdit
+	connect, disconnect,caConf,send *walk.PushButton
+	ascii,noAscii                   *walk.RadioButton
+	msg,data                        *walk.TextEdit
+	ssl,timeSend                    *walk.CheckBox
+	connConf                        ConnectConfig
+	moteConf                        MoteConfig
+	connConfFileName                string
+	moteConfFileName                string
+	icon 							*walk.Icon
 }
 
 func main() {
-	mw := &DTUMainWindow{model: NewDTUModel()}
+	mw := &MoteMainWindow{model: NewMoteModel()}
+	mw.icon,_ = walk.NewIconFromResourceId(3)
 	maxWidth := int(win.GetSystemMetrics(win.SM_CXSCREEN)) - 200
 	maxHeight := int(win.GetSystemMetrics(win.SM_CYSCREEN)) - 100
 	err := MainWindow{
 		AssignTo: &mw.MainWindow,
-		Title:    "LoRaDTUMock",
-		//Icon:		"test.ico",
+		Title:    "LoRaMoteMock",
+		Icon:		mw.icon,
 		Size:     Size{maxWidth,maxHeight },
 		Layout:   VBox{},
 		Children: []Widget{
@@ -65,7 +67,7 @@ func main() {
 					PushButton{Text:"断开连接", AssignTo:&mw.disconnect, Enabled:false, OnClicked: mw.Disconnect},
 					CheckBox{Text:"开启SSL/TLS",AssignTo:&mw.ssl,OnClicked:mw.SSL},
 					PushButton{Text:"证书配置",Enabled:false,AssignTo:&mw.caConf,OnClicked: mw.ConnectConfig},
-					PushButton{Text:"终端配置",OnClicked: mw.DTUConfig},
+					PushButton{Text:"终端配置",OnClicked: mw.MoteConfig},
 					PushButton{Text:"清空数据",OnClicked: mw.Clean},
 				},
 			},
@@ -140,13 +142,13 @@ func main() {
 		},
 	}.Create()
 	if err != nil {
-		panic("LoRaDTUMock窗口创建失败")
+		panic("LoRaMoteMock窗口创建失败")
 	}
 	_ = mw.port.SetValue(1883)
 	_ = mw.sendInterval.SetValue(1000)
 	mw.ascii.SetChecked(true)
 	dir,_ := os.Getwd()
-	mw.connConfFileName = dir + "/LoRaDTUMock.json"
+	mw.connConfFileName = dir + "/LoRaMoteMock.json"
 	data, err := ioutil.ReadFile(mw.connConfFileName)
 	if err == nil {
 		err = json.Unmarshal(data, &mw.connConf)
@@ -160,10 +162,10 @@ func main() {
 		_ = mw.username.SetText(mw.connConf.Username)
 		_ = mw.password.SetText(mw.connConf.Password)
 	}
-	mw.dtuConfFileName = dir + "/LoRaDTUConf.json"
-	data, err = ioutil.ReadFile(mw.dtuConfFileName)
+	mw.moteConfFileName = dir + "/LoRaMoteConf.json"
+	data, err = ioutil.ReadFile(mw.moteConfFileName)
 	if err == nil {
-		err = json.Unmarshal(data, &mw.dtuConf)
+		err = json.Unmarshal(data, &mw.moteConf)
 		if err != nil {
 			msg := "配置文件格式错误:" + err.Error()
 			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
@@ -174,7 +176,7 @@ func main() {
 }
 
 
-func (mw *DTUMainWindow) Connect()  {
+func (mw *MoteMainWindow) Connect()  {
 	go func() {
 		if mw.host.Text() != "" && mw.port.Value() > 0 {
 			opts := paho.NewClientOptions()
@@ -235,7 +237,7 @@ func (mw *DTUMainWindow) Connect()  {
 	}()
 }
 
-func (mw *DTUMainWindow) Disconnect()  {
+func (mw *MoteMainWindow) Disconnect()  {
 	mw.connect.SetEnabled(true)
 	mw.host.SetEnabled(true)
 	mw.port.SetEnabled(true)
@@ -246,14 +248,15 @@ func (mw *DTUMainWindow) Disconnect()  {
 	mw.mqttClient.Disconnect(0)
 }
 
-func (mw *DTUMainWindow) DTUConfig()  {
+func (mw *MoteMainWindow) MoteConfig()  {
 	var dlg *walk.Dialog
 	var otaa *walk.CheckBox
 	var gatewayId,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
 	var fPort,fCnt,freq *walk.NumberEdit
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
-		Title: "DTU配置",
+		Title: "终端配置",
+		Icon: mw.icon,
 		Layout:   VBox{},
 		AssignTo: &dlg,
 		DefaultButton: &acceptPB,
@@ -306,21 +309,21 @@ func (mw *DTUMainWindow) DTUConfig()  {
 						AssignTo: &acceptPB,
 						Text:     "确定",
 						OnClicked: func() {
-							mw.dtuConf.OTAA = otaa.Checked()
-							mw.dtuConf.GatewayId = gatewayId.Text()
-							mw.dtuConf.DevEui = devEUI.Text()
-							mw.dtuConf.DevAddr = devAddr.Text()
-							mw.dtuConf.AppKey = appKey.Text()
-							mw.dtuConf.AppSKey = appSKey.Text()
-							mw.dtuConf.NwkSKey = nwkSKey.Text()
-							mw.dtuConf.FPort = uint8(fPort.Value())
-							mw.dtuConf.FCnt = uint32(fCnt.Value())
-							mw.dtuConf.Freq = freq.Value()
+							mw.moteConf.OTAA = otaa.Checked()
+							mw.moteConf.GatewayId = gatewayId.Text()
+							mw.moteConf.DevEui = devEUI.Text()
+							mw.moteConf.DevAddr = devAddr.Text()
+							mw.moteConf.AppKey = appKey.Text()
+							mw.moteConf.AppSKey = appSKey.Text()
+							mw.moteConf.NwkSKey = nwkSKey.Text()
+							mw.moteConf.FPort = uint8(fPort.Value())
+							mw.moteConf.FCnt = uint32(fCnt.Value())
+							mw.moteConf.Freq = freq.Value()
 
 							var confData bytes.Buffer
-							d,_  := json.Marshal(&mw.dtuConf)
+							d,_  := json.Marshal(&mw.moteConf)
 							_ = json.Indent(&confData, d, "", "\t")
-							_ = ioutil.WriteFile(mw.dtuConfFileName,confData.Bytes(),0644)
+							_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 							dlg.Accept()
 						},
 					},
@@ -334,25 +337,25 @@ func (mw *DTUMainWindow) DTUConfig()  {
 		},
 	}.Create(mw)
 
-	otaa.SetChecked(mw.dtuConf.OTAA)
-	_ = gatewayId.SetText(mw.dtuConf.GatewayId)
-	_ = devEUI.SetText(mw.dtuConf.DevEui)
-	_ = devAddr.SetText(mw.dtuConf.DevAddr)
-	_ = appKey.SetText(mw.dtuConf.AppKey)
-	_ = appSKey.SetText(mw.dtuConf.AppSKey)
-	_ = nwkSKey.SetText(mw.dtuConf.NwkSKey)
-	_ = fPort.SetValue(float64(mw.dtuConf.FPort))
-	_ = fCnt.SetValue(float64(mw.dtuConf.FCnt))
-	_ = freq.SetValue(mw.dtuConf.Freq)
+	otaa.SetChecked(mw.moteConf.OTAA)
+	_ = gatewayId.SetText(mw.moteConf.GatewayId)
+	_ = devEUI.SetText(mw.moteConf.DevEui)
+	_ = devAddr.SetText(mw.moteConf.DevAddr)
+	_ = appKey.SetText(mw.moteConf.AppKey)
+	_ = appSKey.SetText(mw.moteConf.AppSKey)
+	_ = nwkSKey.SetText(mw.moteConf.NwkSKey)
+	_ = fPort.SetValue(float64(mw.moteConf.FPort))
+	_ = fCnt.SetValue(float64(mw.moteConf.FCnt))
+	_ = freq.SetValue(mw.moteConf.Freq)
 
 	dlg.Run()
 }
-func (mw *DTUMainWindow) Clean()  {
-	mw.model.Items = []*DTU{}
+func (mw *MoteMainWindow) Clean()  {
+	mw.model.Items = []*Mote{}
 	mw.model.PublishRowsReset()
 	_ = mw.tv.SetSelectedIndexes([]int{})
 }
-func (mw *DTUMainWindow) SSL()  {
+func (mw *MoteMainWindow) SSL()  {
 	if mw.ssl.Checked() {
 		mw.caConf.SetEnabled(true)
 	}else{
@@ -360,12 +363,13 @@ func (mw *DTUMainWindow) SSL()  {
 	}
 }
 
-func (mw *DTUMainWindow) ConnectConfig()  {
+func (mw *MoteMainWindow) ConnectConfig()  {
 	var dlg *walk.Dialog
 	var caCert,tlsCert,tlsKey *walk.LineEdit
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
 		Title: "连接配置",
+		Icon: mw.icon,
 		Layout:   VBox{},
 		AssignTo: &dlg,
 		DefaultButton: &acceptPB,
@@ -445,7 +449,7 @@ func (mw *DTUMainWindow) ConnectConfig()  {
 	dlg.Run()
 }
 
-func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
+func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 	var downlinkFrame gw.DownlinkFrame
 	err := proto.Unmarshal(message.Payload(),&downlinkFrame)
 	if err == nil {
@@ -465,11 +469,11 @@ func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 				var origData bytes.Buffer
 				jsonData,_ := phy.MarshalJSON()
 				_ = json.Indent(&origData, jsonData, "", "  ")
-				dd := &DTU{
+				dd := &Mote{
 					Index: mw.model.Len() + 1,
 					Direction:"downlink",
-					DevEUI: mw.dtuConf.DevEui,
-					DevAddr: mw.dtuConf.DevAddr,
+					DevEUI: mw.moteConf.DevEui,
+					DevAddr: mw.moteConf.DevAddr,
 					MType: phy.MHDR.MType.String(),
 					GatewayID: hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
 					Time:time.Now().Format("2006-01-02 15:04:05"),
@@ -495,8 +499,8 @@ func (mw *DTUMainWindow) HandleData(client paho.Client, message paho.Message){
 	}
 }
 
-func (mw *DTUMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
-	key := mw.dtuConf.AppKey
+func (mw *MoteMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
+	key := mw.moteConf.AppKey
 	var aseKey lorawan.AES128Key
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptJoinAcceptPayload(aseKey)
@@ -507,36 +511,36 @@ func (mw *DTUMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
 	if !ok {
 		fmt.Println("lorawan: MACPayload must be of type *JoinAcceptPayload")
 	}
-	mw.dtuConf.DevAddr = jap.DevAddr.String()
-	dn := mw.dtuConf.devNonce
+	mw.moteConf.DevAddr = jap.DevAddr.String()
+	dn := mw.moteConf.devNonce
 	appSKey,err := getAppSKey(aseKey,jap.HomeNetID,jap.JoinNonce,dn)
 	if err == nil {
-		mw.dtuConf.AppSKey = appSKey.String()
-		fmt.Println(mw.dtuConf.AppSKey)
+		mw.moteConf.AppSKey = appSKey.String()
+		fmt.Println(mw.moteConf.AppSKey)
 	}
 	nwkSKey,err := getNwkSKey(aseKey,jap.HomeNetID,jap.JoinNonce,dn)
 	if err == nil {
-		mw.dtuConf.NwkSKey = nwkSKey.String()
-		fmt.Println(mw.dtuConf.NwkSKey)
+		mw.moteConf.NwkSKey = nwkSKey.String()
+		fmt.Println(mw.moteConf.NwkSKey)
 	}
 }
 
-func (mw *DTUMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
+func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
 	mpl := phy.MACPayload.(*lorawan.MACPayload)
-	key := mw.dtuConf.AppSKey
+	key := mw.moteConf.AppSKey
 	if mpl.FPort != nil && *mpl.FPort == 0 {
-		key = mw.dtuConf.NwkSKey
+		key = mw.moteConf.NwkSKey
 	}
 
 	var aseKey lorawan.AES128Key
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptFRMPayload(aseKey)
 	if err == nil {
-		mw.dtuConf.DevAddr = mpl.FHDR.DevAddr.String()
+		mw.moteConf.DevAddr = mpl.FHDR.DevAddr.String()
 	}
 }
 
-func (mw *DTUMainWindow) PushData(gatewayEUI string,event string, msg proto.Message)  {
+func (mw *MoteMainWindow) PushData(gatewayEUI string,event string, msg proto.Message)  {
 	topic := fmt.Sprintf("gateway/%s/event/%s",gatewayEUI,event)
 	b, err := proto.Marshal(msg)
 	if err != nil {
@@ -549,26 +553,26 @@ func (mw *DTUMainWindow) PushData(gatewayEUI string,event string, msg proto.Mess
 		fmt.Println("mqtt message error")
 	}
 }
-func (mw *DTUMainWindow) sendMsg() error{
+func (mw *MoteMainWindow) sendMsg() error{
 	if mw.mqttClient == nil || !mw.mqttClient.IsConnected() {
 		msg := "请先连接服务器"
 		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 		return errors.New("请先连接服务器")
 	}
-	if mw.dtuConf.OTAA && mw.dtuConf.DevAddr == ""{
-		mw.dtuConf.devNonce = lorawan.DevNonce(rand.Uint32())
+	if mw.moteConf.OTAA && mw.moteConf.DevAddr == ""{
+		mw.moteConf.devNonce = lorawan.DevNonce(rand.Uint32())
 		appEui := "0807060504030201"
-		packet,phy,_ := BuildJoin(mw.dtuConf.GatewayId,appEui,mw.dtuConf.DevEui,mw.dtuConf.AppKey,
-			5,2,mw.dtuConf.Freq,7,-51, mw.dtuConf.devNonce)
+		packet,phy,_ := BuildJoin(mw.moteConf.GatewayId,appEui,mw.moteConf.DevEui,mw.moteConf.AppKey,
+			5,2,mw.moteConf.Freq,7,-51, mw.moteConf.devNonce)
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
-		du := &DTU{
+		du := &Mote{
 			Index:mw.model.Len() + 1,
 			Direction:"uplink",
-			DevEUI:mw.dtuConf.DevEui,
+			DevEUI:mw.moteConf.DevEui,
 			MType:phy.MHDR.MType.String(),
-			GatewayID:mw.dtuConf.GatewayId,
+			GatewayID:mw.moteConf.GatewayId,
 			Rssi:packet.Payload.RXPK[0].RSSI,
 			LoRaSNR:packet.Payload.RXPK[0].LSNR,
 			Frequency:packet.Payload.RXPK[0].Freq,
@@ -580,13 +584,13 @@ func (mw *DTUMainWindow) sendMsg() error{
 		_ = mw.tv.SetSelectedIndexes([]int{})
 		frames,_:= packet.GetUplinkFrames(true,false)
 		for j := range frames {
-			mw.PushData(mw.dtuConf.GatewayId,"up",&frames[j])
+			mw.PushData(mw.moteConf.GatewayId,"up",&frames[j])
 		}
 		fmt.Println("push join ")
-		for cnt := 0;mw.dtuConf.DevAddr == "" && cnt < 5;cnt ++ {
+		for cnt := 0;mw.moteConf.DevAddr == "" && cnt < 5;cnt ++ {
 			time.Sleep(time.Second)
 		}
-		if mw.dtuConf.DevAddr != "" {
+		if mw.moteConf.DevAddr != "" {
 			fmt.Println("join ok")
 		}else{
 			fmt.Println("join failed")
@@ -607,29 +611,29 @@ func (mw *DTUMainWindow) sendMsg() error{
 	}
 	var fCtrl lorawan.FCtrl
 	_ = fCtrl.UnmarshalBinary([]byte{128})
-	key := mw.dtuConf.AppSKey
-	if mw.dtuConf.FPort == 0 {
-		key = mw.dtuConf.NwkSKey
+	key := mw.moteConf.AppSKey
+	if mw.moteConf.FPort == 0 {
+		key = mw.moteConf.NwkSKey
 	}
-	packet,phy,_ := BuildUpData(mw.dtuConf.GatewayId,mw.dtuConf.DevAddr,key,
-		mw.dtuConf.NwkSKey,mw.dtuConf.FCnt,mw.dtuConf.FPort,5,2,mw.dtuConf.Freq,7,
+	packet,phy,_ := BuildUpData(mw.moteConf.GatewayId,mw.moteConf.DevAddr,key,
+		mw.moteConf.NwkSKey,mw.moteConf.FCnt,mw.moteConf.FPort,5,2,mw.moteConf.Freq,7,
 		lorawan.UnconfirmedDataUp,fCtrl,-51,bmsg)
 
 	var origData bytes.Buffer
 	jsonData,_ := phy.MarshalJSON()
 	_ = json.Indent(&origData, jsonData, "", "  ")
-	du := &DTU{
+	du := &Mote{
 		Index:mw.model.Len() + 1,
 		Direction:"uplink",
-		DevEUI:mw.dtuConf.DevEui,
-		DevAddr:mw.dtuConf.DevAddr,
+		DevEUI:mw.moteConf.DevEui,
+		DevAddr:mw.moteConf.DevAddr,
 		MType:phy.MHDR.MType.String(),
-		GatewayID:mw.dtuConf.GatewayId,
+		GatewayID:mw.moteConf.GatewayId,
 		Rssi:packet.Payload.RXPK[0].RSSI,
 		LoRaSNR:packet.Payload.RXPK[0].LSNR,
 		Frequency:packet.Payload.RXPK[0].Freq,
-		FCnt:mw.dtuConf.FCnt,
-		FPort:mw.dtuConf.FPort,
+		FCnt:mw.moteConf.FCnt,
+		FPort:mw.moteConf.FPort,
 		HexData:hex.EncodeToString(bmsg),
 		AsciiData:BytesToString(bmsg),
 		Time:time.Now().Format("2006-01-02 15:04:05"),
@@ -640,20 +644,20 @@ func (mw *DTUMainWindow) sendMsg() error{
 	_ = mw.tv.SetSelectedIndexes([]int{})
 	frames,_:= packet.GetUplinkFrames(true,false)
 	for j := range frames {
-		mw.PushData(mw.dtuConf.GatewayId,"up",&frames[j])
+		mw.PushData(mw.moteConf.GatewayId,"up",&frames[j])
 	}
-	mw.dtuConf.FCnt ++
+	mw.moteConf.FCnt ++
 	var confData bytes.Buffer
-	d,_  := json.Marshal(&mw.dtuConf)
+	d,_  := json.Marshal(&mw.moteConf)
 	_ = json.Indent(&confData, d, "", "\t")
-	_ = ioutil.WriteFile(mw.dtuConfFileName,confData.Bytes(),0644)
+	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 	return nil
 }
 
-func (mw *DTUMainWindow) SendMsg() {
+func (mw *MoteMainWindow) SendMsg() {
 	go mw.sendMsg()
 }
-func (mw *DTUMainWindow) SetSend() {
+func (mw *MoteMainWindow) SetSend() {
 	if mw.timeSend.Checked() {
 		mw.ascii.SetEnabled(false)
 		mw.noAscii.SetEnabled(false)
@@ -669,7 +673,7 @@ func (mw *DTUMainWindow) SetSend() {
 	}
 }
 
-func (mw *DTUMainWindow) TimeSend()  {
+func (mw *MoteMainWindow) TimeSend()  {
 	if mw.sendInterval.Value() <= 0 {
 		msg := "时间间隔需大于0"
 		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
@@ -690,7 +694,7 @@ func (mw *DTUMainWindow) TimeSend()  {
 		}
 	}()
 }
-func (mw *DTUMainWindow) tvItemActivated() {
+func (mw *MoteMainWindow) tvItemActivated() {
 	msg := ""
 	for _, i := range mw.tv.SelectedIndexes() {
 		msg += mw.model.Items[i].OrigData + "\n"
