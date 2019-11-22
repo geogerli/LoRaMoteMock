@@ -22,8 +22,8 @@ type MoteConfig struct {
 	DevEui    string	`json:"devEui"`
 	DevAddr   string	`json:"devAddr"`
 	AppKey    string	`json:"appKey"`
-	AppSKey   string	`json:"appSKey"`
 	NwkSKey   string	`json:"nwkSKey"`
+	AppSKey   string	`json:"appSKey"`
 	FPort     uint8		`json:"fPort"`
 	FCnt      uint32	`json:"fCnt"`
 	Freq      float64	`json:"freq"`

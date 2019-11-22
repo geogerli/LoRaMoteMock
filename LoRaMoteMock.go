@@ -176,6 +176,11 @@ func main() {
 		mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
 	}
 	mw.Run()
+	var confData bytes.Buffer
+	mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
+	d,_  := json.Marshal(&mw.motesConf)
+	_ = json.Indent(&confData, d, "", "\t")
+	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 }
 
 
@@ -489,7 +494,9 @@ func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 				case lorawan.JoinAccept:
 					mw.HandleJoinAccept(&phy)
 				case lorawan.ConfirmedDataDown,lorawan.UnconfirmedDataDown:
-					mw.HandleDataDown(&phy)
+					if !mw.HandleDataDown(&phy) {
+						return
+					}
 				default:
 					fmt.Println("未处理的帧")
 				}
@@ -552,7 +559,7 @@ func (mw *MoteMainWindow) HandleJoinAccept(phy *lorawan.PHYPayload){
 	}
 }
 
-func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
+func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload) bool{
 	mpl := phy.MACPayload.(*lorawan.MACPayload)
 	key := mw.currentMoteConf.AppSKey
 	if mpl.FPort != nil && *mpl.FPort == 0 {
@@ -563,8 +570,11 @@ func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload){
 	_ = aseKey.UnmarshalText([]byte(key))
 	err := phy.DecryptFRMPayload(aseKey)
 	if err == nil {
-		mw.currentMoteConf.DevAddr = mpl.FHDR.DevAddr.String()
+		if mw.currentMoteConf.DevAddr == mpl.FHDR.DevAddr.String() {
+			return true
+		}
 	}
+	return false
 }
 
 func (mw *MoteMainWindow) PushData(gatewayEUI string,event string, msg proto.Message)  {
@@ -674,10 +684,6 @@ func (mw *MoteMainWindow) sendMsg() error{
 		mw.PushData(mw.currentMoteConf.GatewayId,"up",&frames[j])
 	}
 	mw.currentMoteConf.FCnt ++
-	var confData bytes.Buffer
-	d,_  := json.Marshal(&mw.currentMoteConf)
-	_ = json.Indent(&confData, d, "", "\t")
-	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 	return nil
 }
 
