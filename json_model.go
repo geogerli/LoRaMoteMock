@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/lxn/walk"
+	"strconv"
+	"strings"
 )
 
 func FormatBool(b bool) string {
@@ -30,7 +32,14 @@ func (d *Node) Text() string {
 	case int,int8,int16,int32,int64,uint,uint8,uint16,uint32,uint64:
 		txt += dim + fmt.Sprintf("%d",d.value)
 	case float32,float64:
-		txt += dim + fmt.Sprintf("%f",d.value)
+		v := fmt.Sprintf("%f",d.value)
+		s := strings.Split(v,".")
+		i,_ := strconv.Atoi(s[1])
+		if i == 0 {
+			txt += dim + fmt.Sprintf("%d",int(d.value.(float64)))
+		}else{
+			txt += dim + v
+		}
 	case string:
 		txt += dim + "\"" + d.value.(string) + "\""
 	case bool:

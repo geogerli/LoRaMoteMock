@@ -138,7 +138,9 @@ func main() {
 				Layout: HBox{},
 				Children: []Widget{
 					TextEdit{AssignTo:&mw.data,ReadOnly:true,HScroll:true,VScroll:true},
-					TreeView{AssignTo: &mw.jsonView},
+					TreeView{AssignTo: &mw.jsonView,ContextMenuItems:[]MenuItem{
+						Action{Text:"复制值", OnTriggered: mw.jsonItemCopy},
+					}},
 				},
 			},
 		},
@@ -177,6 +179,8 @@ func main() {
 		}
 		mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
 	}
+
+	go mw.ConnectCheck()
 	mw.Run()
 	var confData bytes.Buffer
 	mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
@@ -185,6 +189,14 @@ func main() {
 	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
 }
 
+func (mw *MoteMainWindow) ConnectCheck()  {
+	for{
+		if mw.mqttClient != nil && !mw.mqttClient.IsConnected() {
+			mw.Disconnect()
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
 
 func (mw *MoteMainWindow) Connect()  {
 	go func() {
@@ -230,6 +242,7 @@ func (mw *MoteMainWindow) Connect()  {
 				mw.disconnect.SetEnabled(true)
 				mw.connect.SetEnabled(false)
 				mw.caConf.SetEnabled(false)
+				mw.ssl.SetEnabled(false)
 				topic := "gateway/+/command/#"
 				token := mw.mqttClient.Subscribe(topic,0, mw.HandleData)
 				if token.Wait() && token.Error() != nil {
@@ -256,6 +269,7 @@ func (mw *MoteMainWindow) Disconnect()  {
 	mw.disconnect.SetEnabled(false)
 	mw.caConf.SetEnabled(true)
 	mw.mqttClient.Disconnect(0)
+	mw.ssl.SetEnabled(true)
 }
 
 func (mw *MoteMainWindow) MoteConfig() {
@@ -342,6 +356,17 @@ func (mw *MoteMainWindow) MoteConfig() {
 							mw.currentMoteConf.NwkSKey = nwkSKey.Text()
 							mw.currentMoteConf.FCnt = uint32(fCnt.Value())
 							mw.motesConf.Current = name.Text()
+
+							_,ok := mw.motesConf.Configs[mw.motesConf.Current]
+							if !ok {
+								//default
+								mw.currentMoteConf.FPort = 1
+								mw.currentMoteConf.Freq = 470.3
+								mw.currentMoteConf.RSSI = -50
+								mw.currentMoteConf.LSNR = 7
+								mw.currentMoteConf.FCtrl.ADR = true
+							}
+
 							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
 
 							var confData bytes.Buffer
@@ -380,6 +405,11 @@ func (mw *MoteMainWindow) MoteConfig() {
 }
 
 func (mw *MoteMainWindow) MoteAdvancedConfig()  {
+	if mw.motesConf.Current == "" || len(mw.motesConf.Configs) <= 0 {
+		msg := "请先配置终端基础配置"
+		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+		return
+	}
 	var dlg *walk.Dialog
 	var mType,sf *walk.ComboBox
 	var fPort,freq,ch,lsnr,rssi *walk.NumberEdit
@@ -387,7 +417,7 @@ func (mw *MoteMainWindow) MoteAdvancedConfig()  {
 	var acceptPB, cancelPB *walk.PushButton
 	_ = Dialog{
 		Title: "终端高级配置",
-		//Icon: mw.icon,
+		Icon: mw.icon,
 		Layout:   VBox{},
 		AssignTo: &dlg,
 		DefaultButton: &acceptPB,
@@ -402,15 +432,15 @@ func (mw *MoteMainWindow) MoteAdvancedConfig()  {
 					Label{Text:"扩频因子:"},
 					ComboBox{AssignTo:&sf,Model:[]string{"SF12","SF11","SF10","SF9","SF8","SF7"},Value:"SF12"},
 					Label{Text:"端口:"},
-					NumberEdit{AssignTo:&fPort,Value:1.0},
+					NumberEdit{AssignTo:&fPort},
 					Label{Text:"频率:"},
-					NumberEdit{AssignTo:&freq,Decimals:2,Value:470.3},
+					NumberEdit{AssignTo:&freq,Decimals:2},
 					Label{Text:"信道:"},
-					NumberEdit{AssignTo:&ch,Value:0},
+					NumberEdit{AssignTo:&ch},
 					Label{Text:"信号强度:"},
-					NumberEdit{AssignTo:&rssi,Value:-50.0},
+					NumberEdit{AssignTo:&rssi},
 					Label{Text:"信噪比:"},
-					NumberEdit{AssignTo:&lsnr,Value:7.0},
+					NumberEdit{AssignTo:&lsnr},
 
 					CheckBox{AssignTo:&adr,Text:"adr",Checked:true},
 					CheckBox{AssignTo:&req,Text:"req"},
@@ -427,11 +457,6 @@ func (mw *MoteMainWindow) MoteAdvancedConfig()  {
 						AssignTo: &acceptPB,
 						Text:     "确定",
 						OnClicked: func() {
-							if mw.motesConf.Current == "" {
-								msg := "请先配置终端基础配置"
-								walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
-								return
-							}
 							switch mType.CurrentIndex() {
 							case 0:
 								mw.currentMoteConf.MType = uint8(lorawan.UnconfirmedDataUp)
@@ -854,5 +879,19 @@ func (mw *MoteMainWindow) tvItemActivated() {
 	m := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(msg), &m); err == nil {
 		_ = mw.jsonView.SetModel(NewJSONModel(m))
+	}
+}
+
+func (mw *MoteMainWindow) jsonItemCopy(){
+	msg := mw.jsonView.CurrentItem().Text()
+	if strings.Contains(msg,":") {
+		msgs := strings.Split(msg,":")
+		msg = msgs[1]
+		msg = strings.Trim(msg," ")
+		msg = strings.Trim(msg,"\"")
+	}
+	if err := walk.Clipboard().SetText(msg); err != nil {
+		msg := "复制错误:" + err.Error()
+		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 	}
 }
