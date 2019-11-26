@@ -68,8 +68,7 @@ func main() {
 					PushButton{Text:"断开连接", AssignTo:&mw.disconnect, Enabled:false, OnClicked: mw.Disconnect},
 					CheckBox{Text:"开启SSL/TLS",AssignTo:&mw.ssl,OnClicked:mw.SSL},
 					PushButton{Text:"证书配置",Enabled:false,AssignTo:&mw.caConf,OnClicked: mw.ConnectConfig},
-					PushButton{Text:"终端基本配置",OnClicked: mw.MoteConfig},
-					PushButton{Text:"终端高级配置",OnClicked: mw.MoteAdvancedConfig},
+					PushButton{Text:"终端配置",OnClicked: mw.MoteConfig},
 					PushButton{Text:"清空数据",OnClicked: mw.Clean},
 				},
 			},
@@ -166,7 +165,15 @@ func main() {
 		_ = mw.username.SetText(mw.connConf.Username)
 		_ = mw.password.SetText(mw.connConf.Password)
 	}
+	//default
 	mw.currentMoteConf.AppEui = "0102030405060708"
+	mw.currentMoteConf.MType = uint8(lorawan.UnconfirmedDataUp)
+	mw.currentMoteConf.FPort = 1
+	mw.currentMoteConf.Freq = 470.3
+	mw.currentMoteConf.RSSI = -50
+	mw.currentMoteConf.LSNR = 7
+	mw.currentMoteConf.FCtrl.ADR = true
+
 	mw.moteConfFileName = dir + "/LoRaMoteConf.json"
 	mw.motesConf.Configs = make(map[string]MoteConfig)
 	data, err = ioutil.ReadFile(mw.moteConfFileName)
@@ -182,11 +189,13 @@ func main() {
 
 	go mw.ConnectCheck()
 	mw.Run()
-	var confData bytes.Buffer
-	mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
-	d,_  := json.Marshal(&mw.motesConf)
-	_ = json.Indent(&confData, d, "", "\t")
-	_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
+	if mw.motesConf.Current != "" {
+		var confData bytes.Buffer
+		mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
+		d,_  := json.Marshal(&mw.motesConf)
+		_ = json.Indent(&confData, d, "", "\t")
+		_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
+	}
 }
 
 func (mw *MoteMainWindow) ConnectCheck()  {
@@ -276,66 +285,107 @@ func (mw *MoteMainWindow) MoteConfig() {
 	var dlg *walk.Dialog
 	var name *walk.ComboBox
 	var otaa *walk.CheckBox
-	var gatewayId,appEUI,devEUI,devAddr,appKey,appSKey,nwkSKey *walk.LineEdit
-	var fCnt *walk.NumberEdit
+
 	var acceptPB, cancelPB *walk.PushButton
+	var db *walk.DataBinder
 	_ = Dialog{
 		Title: "终端配置",
 		Icon: mw.icon,
 		Layout:   VBox{},
 		AssignTo: &dlg,
+		DataBinder: DataBinder{
+			AssignTo:&db,
+			Name:"config",
+			DataSource: &mw.currentMoteConf,
+			ErrorPresenter: ToolTipErrorPresenter{},
+		},
 		DefaultButton: &acceptPB,
 		CancelButton:  &cancelPB,
 		MinSize: Size{400, 200},
 		Children: []Widget{
-			Composite{
-				Layout:Grid{Columns: 2},
-				Children:[]Widget{
-					Label{Text: "终端名称:"},
-					ComboBox{AssignTo: &name,Editable: true,OnCurrentIndexChanged: func() {
-						mw.motesConf.Current = name.Text()
-						mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
-						otaa.SetChecked(mw.currentMoteConf.OTAA)
-						_ = gatewayId.SetText(mw.currentMoteConf.GatewayId)
-						_ = devEUI.SetText(mw.currentMoteConf.DevEui)
-						_ = devAddr.SetText(mw.currentMoteConf.DevAddr)
-						_ = appKey.SetText(mw.currentMoteConf.AppKey)
-						_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
-						_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
-						_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
-
-					}},
-					Label{Text:"入网方式:"},
-					CheckBox{AssignTo: &otaa,Text:"OTAA入网",OnClicked: func() {
-						if otaa.Checked() {
-							appKey.SetEnabled(true)
-							devAddr.SetEnabled(false)
-							appSKey.SetEnabled(false)
-							nwkSKey.SetEnabled(false)
-							_ = devAddr.SetText("")
-						}else{
-							appKey.SetEnabled(false)
-							devAddr.SetEnabled(true)
-							appSKey.SetEnabled(true)
-							nwkSKey.SetEnabled(true)
-						}
-					}},
-					Label{Text:"网关ID:"},
-					LineEdit{AssignTo:&gatewayId},
-					Label{Text:"应用EUI:"},
-					LineEdit{AssignTo:&appEUI,Text:"0102030405060708"},
-					Label{Text:"终端EUI:"},
-					LineEdit{AssignTo:&devEUI},
-					Label{Text:"终端地址:"},
-					LineEdit{AssignTo:&devAddr},
-					Label{Text:"应用秘钥:"},
-					LineEdit{AssignTo:&appKey,Enabled:false},
-					Label{Text:"网络会话秘钥:"},
-					LineEdit{AssignTo:&nwkSKey},
-					Label{Text:"应用会话秘钥:"},
-					LineEdit{AssignTo:&appSKey},
-					Label{Text:"上行计数:"},
-					NumberEdit{AssignTo:&fCnt},
+			TabWidget{
+				Pages:[]TabPage{
+					{
+						Title:"基础配置",
+						Layout:Grid{Columns: 2},
+						Children:[]Widget{
+							Label{Text: "配置名称:"},
+							ComboBox{AssignTo: &name,Editable: true, OnCurrentIndexChanged: func() {
+								mw.motesConf.Current = name.Text()
+								mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
+								_ = db.Reset()
+							}},
+							Label{Text:"入网方式:"},
+							CheckBox{AssignTo: &otaa,Text:"OTAA入网",Checked:Bind("OTAA"),OnCheckStateChanged: func() {
+								mw.currentMoteConf.OTAA = otaa.Checked()
+								_ = db.Reset()
+							}},
+							Label{Text:"网关EUI:"},
+							LineEdit{Text:Bind("GatewayEui")},
+							Label{Text:"应用EUI:",Visible:Bind("OTAA")},
+							LineEdit{Text:Bind("AppEui"),Visible:Bind("OTAA")},
+							Label{Text:"终端EUI:"},
+							LineEdit{Text:Bind("DevEui")},
+							Label{Text:"应用秘钥:",Visible:Bind("OTAA")},
+							LineEdit{Text:Bind("AppKey"),Visible:Bind("OTAA")},
+							Label{Text:"终端地址:"},
+							LineEdit{Text:Bind("DevAddr"),ReadOnly:Bind("OTAA")},
+							Label{Text:"网络会话秘钥:"},
+							LineEdit{Text:Bind("NwkSKey"),ReadOnly:Bind("OTAA")},
+							Label{Text:"应用会话秘钥:"},
+							LineEdit{Text:Bind("AppSKey"),ReadOnly:Bind("OTAA")},
+							Label{Text:"上行计数:"},
+							NumberEdit{Value:Bind("FCnt")},
+						},
+					},
+					{
+						Title:"高级配置",
+						Layout:Grid{Columns: 2},
+						Children:[]Widget{
+							Label{Text:"消息类型:"},
+							ComboBox{Model:[]struct {
+								Id uint8
+								Name string
+							}{
+								{2,"UnconfirmedDataUp"},
+								{4,"ConfirmedDataUp"},
+							},BindingMember: "Id", DisplayMember: "Name", Value: Bind("MType")},
+							Label{Text:"扩频因子:"},
+							ComboBox{Model:[]struct{
+								Id uint8
+								Name string
+								}{
+									{0,"SF12"},
+									{1,"SF11"},
+									{2,"SF10"},
+									{3,"SF9"},
+									{4,"SF8"},
+									{5,"SF7"},
+								},BindingMember: "Id", DisplayMember: "Name",Value:Bind("DR")},
+							Label{Text:"端口:"},
+							NumberEdit{Value:Bind("FPort")},
+							Label{Text:"频率:"},
+							NumberEdit{Decimals:2,Value:Bind("Freq")},
+							Label{Text:"信道:"},
+							NumberEdit{Value:Bind("Chan")},
+							Label{Text:"信号强度:"},
+							NumberEdit{Value:Bind("RSSI")},
+							Label{Text:"信噪比:"},
+							NumberEdit{Value:Bind("LSNR")},
+							Label{Text:"帧控制:"},
+							GroupBox{
+								Title:"FCtrl",
+								Layout:Grid{Columns: 3},
+								Children:[]Widget{
+									CheckBox{Text:"adr",Checked:Bind("FCtrl.ADR")},
+									CheckBox{Text:"req",Checked:Bind("FCtrl.ADRACKReq")},
+									CheckBox{Text:"ack",Checked:Bind("FCtrl.ACK")},
+									CheckBox{Text:"fPending",Checked:Bind("FCtrl.FPending")},
+									CheckBox{Text:"classB",Checked:Bind("FCtrl.ClassB")},
+								},
+							},
+						},
+					},
 				},
 			},
 			Composite{
@@ -346,29 +396,22 @@ func (mw *MoteMainWindow) MoteConfig() {
 						AssignTo: &acceptPB,
 						Text:     "确定",
 						OnClicked: func() {
-							mw.currentMoteConf.OTAA = otaa.Checked()
-							mw.currentMoteConf.GatewayId = gatewayId.Text()
-							mw.currentMoteConf.AppEui = appEUI.Text()
-							mw.currentMoteConf.DevEui = devEUI.Text()
-							mw.currentMoteConf.DevAddr = devAddr.Text()
-							mw.currentMoteConf.AppKey = appKey.Text()
-							mw.currentMoteConf.AppSKey = appSKey.Text()
-							mw.currentMoteConf.NwkSKey = nwkSKey.Text()
-							mw.currentMoteConf.FCnt = uint32(fCnt.Value())
 							mw.motesConf.Current = name.Text()
-
-							_,ok := mw.motesConf.Configs[mw.motesConf.Current]
-							if !ok {
-								//default
-								mw.currentMoteConf.FPort = 1
-								mw.currentMoteConf.Freq = 470.3
-								mw.currentMoteConf.RSSI = -50
-								mw.currentMoteConf.LSNR = 7
-								mw.currentMoteConf.FCtrl.ADR = true
+							if mw.motesConf.Current == "" {
+								msg := "配置名称不能为空"
+								walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+								return
 							}
-
+							_ = db.Submit()
+							v,ok := mw.motesConf.Configs[mw.motesConf.Current]
+							if ok {
+								if mw.currentMoteConf.OTAA && v.OTAA != mw.currentMoteConf.OTAA {
+									mw.currentMoteConf.DevAddr = ""
+									mw.currentMoteConf.NwkSKey = ""
+									mw.currentMoteConf.AppSKey = ""
+								}
+							}
 							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
-
 							var confData bytes.Buffer
 							d,_  := json.Marshal(&mw.motesConf)
 							_ = json.Indent(&confData, d, "", "\t")
@@ -391,132 +434,6 @@ func (mw *MoteMainWindow) MoteConfig() {
 	}
 	_ = name.SetModel(names)
 	_ = name.SetText(mw.motesConf.Current)
-	otaa.SetChecked(mw.currentMoteConf.OTAA)
-	_ = gatewayId.SetText(mw.currentMoteConf.GatewayId)
-	_ = appEUI.SetText(mw.currentMoteConf.AppEui)
-	_ = devEUI.SetText(mw.currentMoteConf.DevEui)
-	_ = devAddr.SetText(mw.currentMoteConf.DevAddr)
-	_ = appKey.SetText(mw.currentMoteConf.AppKey)
-	_ = appSKey.SetText(mw.currentMoteConf.AppSKey)
-	_ = nwkSKey.SetText(mw.currentMoteConf.NwkSKey)
-	_ = fCnt.SetValue(float64(mw.currentMoteConf.FCnt))
-
-	dlg.Run()
-}
-
-func (mw *MoteMainWindow) MoteAdvancedConfig()  {
-	if mw.motesConf.Current == "" || len(mw.motesConf.Configs) <= 0 {
-		msg := "请先配置终端基础配置"
-		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
-		return
-	}
-	var dlg *walk.Dialog
-	var mType,sf *walk.ComboBox
-	var fPort,freq,ch,lsnr,rssi *walk.NumberEdit
-	var adr,req,ack,fPending,classB *walk.CheckBox
-	var acceptPB, cancelPB *walk.PushButton
-	_ = Dialog{
-		Title: "终端高级配置",
-		Icon: mw.icon,
-		Layout:   VBox{},
-		AssignTo: &dlg,
-		DefaultButton: &acceptPB,
-		CancelButton:  &cancelPB,
-		MinSize: Size{400, 200},
-		Children: []Widget{
-			Composite{
-				Layout:Grid{Columns: 2},
-				Children:[]Widget{
-					Label{Text:"消息类型:"},
-					ComboBox{AssignTo:&mType,Model:[]string{"UnconfirmedDataUp","ConfirmedDataUp"},Value:"UnconfirmedDataUp"},
-					Label{Text:"扩频因子:"},
-					ComboBox{AssignTo:&sf,Model:[]string{"SF12","SF11","SF10","SF9","SF8","SF7"},Value:"SF12"},
-					Label{Text:"端口:"},
-					NumberEdit{AssignTo:&fPort},
-					Label{Text:"频率:"},
-					NumberEdit{AssignTo:&freq,Decimals:2},
-					Label{Text:"信道:"},
-					NumberEdit{AssignTo:&ch},
-					Label{Text:"信号强度:"},
-					NumberEdit{AssignTo:&rssi},
-					Label{Text:"信噪比:"},
-					NumberEdit{AssignTo:&lsnr},
-					Label{Text:"帧控制:"},
-					GroupBox{
-						Title:"FCtrl",
-						Layout:Grid{Columns: 3},
-						Children:[]Widget{
-							CheckBox{AssignTo:&adr,Text:"adr"},
-							CheckBox{AssignTo:&req,Text:"req"},
-							CheckBox{AssignTo:&ack,Text:"ack"},
-							CheckBox{AssignTo:&fPending,Text:"fPending"},
-							CheckBox{AssignTo:&classB,Text:"classB"},
-						},
-					},
-				},
-			},
-			Composite{
-				Layout: HBox{},
-				Children: []Widget{
-					HSpacer{},
-					PushButton{
-						AssignTo: &acceptPB,
-						Text:     "确定",
-						OnClicked: func() {
-							switch mType.CurrentIndex() {
-							case 0:
-								mw.currentMoteConf.MType = uint8(lorawan.UnconfirmedDataUp)
-							case 1:
-								mw.currentMoteConf.MType = uint8(lorawan.ConfirmedDataUp)
-							}
-							mw.currentMoteConf.DR = uint8(sf.CurrentIndex())
-							mw.currentMoteConf.FPort = uint8(fPort.Value())
-							mw.currentMoteConf.Freq = freq.Value()
-							mw.currentMoteConf.Chan = uint8(ch.Value())
-							mw.currentMoteConf.RSSI = int16(rssi.Value())
-							mw.currentMoteConf.LSNR = lsnr.Value()
-							mw.currentMoteConf.FCtrl.ADR = adr.Checked()
-							mw.currentMoteConf.FCtrl.ADRACKReq = req.Checked()
-							mw.currentMoteConf.FCtrl.ACK = ack.Checked()
-							mw.currentMoteConf.FCtrl.FPending = fPending.Checked()
-							mw.currentMoteConf.FCtrl.ClassB = classB.Checked()
-
-							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
-
-							var confData bytes.Buffer
-							d,_  := json.Marshal(&mw.motesConf)
-							_ = json.Indent(&confData, d, "", "\t")
-							_ = ioutil.WriteFile(mw.moteConfFileName,confData.Bytes(),0644)
-							dlg.Accept()
-						},
-					},
-					PushButton{
-						AssignTo:  &cancelPB,
-						Text:      "取消",
-						OnClicked: func() { dlg.Cancel() },
-					},
-				},
-			},
-		},
-	}.Create(mw)
-	switch lorawan.MType(mw.currentMoteConf.MType) {
-	case lorawan.UnconfirmedDataUp:
-		_ = mType.SetCurrentIndex(0)
-	case lorawan.ConfirmedDataUp:
-		_ = mType.SetCurrentIndex(1)
-	}
-	_ = sf.SetCurrentIndex(int(mw.currentMoteConf.DR))
-	_ = fPort.SetValue(float64(mw.currentMoteConf.FPort))
-	_ = freq.SetValue(mw.currentMoteConf.Freq)
-	_ = ch.SetValue(float64(mw.currentMoteConf.Chan))
-	_ = rssi.SetValue(float64(mw.currentMoteConf.RSSI))
-	_ = lsnr.SetValue(mw.currentMoteConf.LSNR)
-	adr.SetChecked(mw.currentMoteConf.FCtrl.ADR)
-	req.SetChecked(mw.currentMoteConf.FCtrl.ADRACKReq)
-	ack.SetChecked(mw.currentMoteConf.FCtrl.ACK )
-	fPending.SetChecked(mw.currentMoteConf.FCtrl.FPending )
-	classB.SetChecked(mw.currentMoteConf.FCtrl.ClassB)
-
 	dlg.Run()
 }
 
@@ -737,7 +654,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 	}
 	if mw.currentMoteConf.OTAA && mw.currentMoteConf.DevAddr == ""{
 		mw.currentMoteConf.devNonce = lorawan.DevNonce(rand.Uint32())
-		packet,phy,err := BuildJoin(mw.currentMoteConf.GatewayId,mw.currentMoteConf.AppEui,
+		packet,phy,err := BuildJoin(mw.currentMoteConf.GatewayEui,mw.currentMoteConf.AppEui,
 			mw.currentMoteConf.DevEui,mw.currentMoteConf.AppKey,mw.currentMoteConf.DR,
 			mw.currentMoteConf.Chan,mw.currentMoteConf.Freq,mw.currentMoteConf.LSNR,
 			mw.currentMoteConf.RSSI, mw.currentMoteConf.devNonce)
@@ -754,7 +671,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 			Direction:"uplink",
 			DevEUI:mw.currentMoteConf.DevEui,
 			MType:phy.MHDR.MType.String(),
-			GatewayID:mw.currentMoteConf.GatewayId,
+			GatewayID:mw.currentMoteConf.GatewayEui,
 			Rssi:packet.Payload.RXPK[0].RSSI,
 			LoRaSNR:packet.Payload.RXPK[0].LSNR,
 			Frequency:packet.Payload.RXPK[0].Freq,
@@ -766,7 +683,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 		_ = mw.tv.SetSelectedIndexes([]int{})
 		frames,_:= packet.GetUplinkFrames(true,false)
 		for j := range frames {
-			mw.PushData(mw.currentMoteConf.GatewayId,"up",&frames[j])
+			mw.PushData(mw.currentMoteConf.GatewayEui,"up",&frames[j])
 		}
 		fmt.Println("push join ")
 		for cnt := 0;mw.currentMoteConf.DevAddr == "" && cnt < 5;cnt ++ {
@@ -795,7 +712,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 	if mw.currentMoteConf.FPort == 0 {
 		key = mw.currentMoteConf.NwkSKey
 	}
-	packet,phy,err := BuildUpData(mw.currentMoteConf.GatewayId,mw.currentMoteConf.DevAddr,key,
+	packet,phy,err := BuildUpData(mw.currentMoteConf.GatewayEui,mw.currentMoteConf.DevAddr,key,
 		mw.currentMoteConf.NwkSKey,mw.currentMoteConf.FCnt,mw.currentMoteConf.FPort,
 		mw.currentMoteConf.DR,mw.currentMoteConf.Chan,mw.currentMoteConf.Freq,mw.currentMoteConf.LSNR,
 		lorawan.MType(mw.currentMoteConf.MType),mw.currentMoteConf.FCtrl,mw.currentMoteConf.RSSI,bmsg)
@@ -813,7 +730,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 		DevEUI:mw.currentMoteConf.DevEui,
 		DevAddr:mw.currentMoteConf.DevAddr,
 		MType:phy.MHDR.MType.String(),
-		GatewayID:mw.currentMoteConf.GatewayId,
+		GatewayID:mw.currentMoteConf.GatewayEui,
 		Rssi:packet.Payload.RXPK[0].RSSI,
 		LoRaSNR:packet.Payload.RXPK[0].LSNR,
 		Frequency:packet.Payload.RXPK[0].Freq,
@@ -829,7 +746,7 @@ func (mw *MoteMainWindow) sendMsg() error{
 	_ = mw.tv.SetSelectedIndexes([]int{})
 	frames,_:= packet.GetUplinkFrames(true,false)
 	for j := range frames {
-		mw.PushData(mw.currentMoteConf.GatewayId,"up",&frames[j])
+		mw.PushData(mw.currentMoteConf.GatewayEui,"up",&frames[j])
 	}
 	mw.currentMoteConf.FCnt ++
 	return nil
