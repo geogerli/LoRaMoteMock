@@ -441,12 +441,18 @@ func (mw *MoteMainWindow) MoteAdvancedConfig()  {
 					NumberEdit{AssignTo:&rssi},
 					Label{Text:"信噪比:"},
 					NumberEdit{AssignTo:&lsnr},
-
-					CheckBox{AssignTo:&adr,Text:"adr",Checked:true},
-					CheckBox{AssignTo:&req,Text:"req"},
-					CheckBox{AssignTo:&ack,Text:"ack"},
-					CheckBox{AssignTo:&fPending,Text:"fPending"},
-					CheckBox{AssignTo:&classB,Text:"classB"},
+					Label{Text:"帧控制:"},
+					GroupBox{
+						Title:"FCtrl",
+						Layout:Grid{Columns: 3},
+						Children:[]Widget{
+							CheckBox{AssignTo:&adr,Text:"adr"},
+							CheckBox{AssignTo:&req,Text:"req"},
+							CheckBox{AssignTo:&ack,Text:"ack"},
+							CheckBox{AssignTo:&fPending,Text:"fPending"},
+							CheckBox{AssignTo:&classB,Text:"classB"},
+						},
+					},
 				},
 			},
 			Composite{
