@@ -284,7 +284,7 @@ func (mw *MoteMainWindow) Disconnect()  {
 func (mw *MoteMainWindow) MoteConfig() {
 	var dlg *walk.Dialog
 	var name *walk.ComboBox
-	var otaa *walk.CheckBox
+	var otaa,join *walk.CheckBox
 
 	var acceptPB, cancelPB *walk.PushButton
 	var db *walk.DataBinder
@@ -316,10 +316,25 @@ func (mw *MoteMainWindow) MoteConfig() {
 								_ = db.Reset()
 							}},
 							Label{Text:"入网方式:"},
-							CheckBox{AssignTo: &otaa,Text:"OTAA入网",Checked:Bind("OTAA"),OnCheckStateChanged: func() {
-								mw.currentMoteConf.OTAA = otaa.Checked()
-								_ = db.Reset()
-							}},
+							Composite{
+								Layout: HBox{},
+								Children: []Widget{
+									CheckBox{AssignTo: &otaa,Text:"OTAA入网",Checked:Bind("OTAA"),OnCheckStateChanged: func() {
+										mw.currentMoteConf.OTAA = otaa.Checked()
+										_ = db.Reset()
+									}},
+									CheckBox{AssignTo:&join,Text:"是否重新入网",Enabled:Bind("OTAA"),OnCheckStateChanged: func() {
+										if mw.currentMoteConf.OTAA && join.Checked() {
+											mw.currentMoteConf.DevAddr = ""
+											mw.currentMoteConf.NwkSKey = ""
+											mw.currentMoteConf.AppSKey = ""
+											mw.currentMoteConf.FCnt = 0
+											_ = db.Reset()
+										}
+									}},
+								},
+							},
+
 							Label{Text:"网关EUI:"},
 							LineEdit{Text:Bind("GatewayEui",Regexp{Pattern:"^[0-9a-fA-F]{16,16}$"})},
 							Label{Text:"应用EUI:",Visible:Bind("OTAA")},
@@ -329,11 +344,11 @@ func (mw *MoteMainWindow) MoteConfig() {
 							Label{Text:"应用秘钥:",Visible:Bind("OTAA")},
 							LineEdit{Text:Bind("AppKey"),Visible:Bind("OTAA")},
 							Label{Text:"终端地址:"},
-							LineEdit{Text:Bind("DevAddr",Regexp{Pattern:"^[0-9a-fA-F]{8,8}$"}),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("DevAddr"),ReadOnly:Bind("OTAA")},
 							Label{Text:"网络会话秘钥:"},
-							LineEdit{Text:Bind("NwkSKey",Regexp{Pattern:"^[0-9a-fA-F]{32,32}$"}),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("NwkSKey"),ReadOnly:Bind("OTAA")},
 							Label{Text:"应用会话秘钥:"},
-							LineEdit{Text:Bind("AppSKey",Regexp{Pattern:"^[0-9a-fA-F]{32,32}$"}),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("AppSKey"),ReadOnly:Bind("OTAA")},
 							Label{Text:"上行计数:"},
 							NumberEdit{Value:Bind("FCnt")},
 						},
@@ -412,6 +427,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 									mw.currentMoteConf.DevAddr = ""
 									mw.currentMoteConf.NwkSKey = ""
 									mw.currentMoteConf.AppSKey = ""
+									mw.currentMoteConf.FCnt = 0
 								}
 							}
 							mw.motesConf.Configs[mw.motesConf.Current] = mw.currentMoteConf
