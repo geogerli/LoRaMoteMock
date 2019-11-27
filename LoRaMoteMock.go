@@ -297,7 +297,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 			AssignTo:&db,
 			Name:"config",
 			DataSource: &mw.currentMoteConf,
-			ErrorPresenter: ToolTipErrorPresenter{},
+			//ErrorPresenter: ToolTipErrorPresenter{},
 		},
 		DefaultButton: &acceptPB,
 		CancelButton:  &cancelPB,
@@ -321,19 +321,19 @@ func (mw *MoteMainWindow) MoteConfig() {
 								_ = db.Reset()
 							}},
 							Label{Text:"网关EUI:"},
-							LineEdit{Text:Bind("GatewayEui")},
+							LineEdit{Text:Bind("GatewayEui",Regexp{Pattern:"^[0-9a-fA-F]{16,16}$"})},
 							Label{Text:"应用EUI:",Visible:Bind("OTAA")},
 							LineEdit{Text:Bind("AppEui"),Visible:Bind("OTAA")},
 							Label{Text:"终端EUI:"},
-							LineEdit{Text:Bind("DevEui")},
+							LineEdit{Text:Bind("DevEui",Regexp{Pattern:"^[0-9a-fA-F]{16,16}$"})},
 							Label{Text:"应用秘钥:",Visible:Bind("OTAA")},
 							LineEdit{Text:Bind("AppKey"),Visible:Bind("OTAA")},
 							Label{Text:"终端地址:"},
-							LineEdit{Text:Bind("DevAddr"),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("DevAddr",Regexp{Pattern:"^[0-9a-fA-F]{8,8}$"}),ReadOnly:Bind("OTAA")},
 							Label{Text:"网络会话秘钥:"},
-							LineEdit{Text:Bind("NwkSKey"),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("NwkSKey",Regexp{Pattern:"^[0-9a-fA-F]{32,32}$"}),ReadOnly:Bind("OTAA")},
 							Label{Text:"应用会话秘钥:"},
-							LineEdit{Text:Bind("AppSKey"),ReadOnly:Bind("OTAA")},
+							LineEdit{Text:Bind("AppSKey",Regexp{Pattern:"^[0-9a-fA-F]{32,32}$"}),ReadOnly:Bind("OTAA")},
 							Label{Text:"上行计数:"},
 							NumberEdit{Value:Bind("FCnt")},
 						},
@@ -402,7 +402,10 @@ func (mw *MoteMainWindow) MoteConfig() {
 								walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 								return
 							}
-							_ = db.Submit()
+							if db.CanSubmit() {
+								_ = db.Submit()
+							}
+							
 							v,ok := mw.motesConf.Configs[mw.motesConf.Current]
 							if ok {
 								if mw.currentMoteConf.OTAA && v.OTAA != mw.currentMoteConf.OTAA {
