@@ -3,7 +3,10 @@
 	"port": 1885,
 	"username": "",
 	"password": "",
+	"ssl": false,
 	"ca_cert": "",
 	"tls_cert": "",
-	"tls_key": ""
+	"tls_key": "",
+	"eventTopic": "gateway/%s/event/%s",
+	"commandTopic": "gateway/+/command/#"
 }

@@ -7,13 +7,16 @@ import (
 )
 
 type ConnectConfig struct {
-	Host string `json:"host"`
-	Port int `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	CACert string	`json:"ca_cert"`
-	TLSCert string	`json:"tls_cert"`
-	TLSKey string `json:"tls_key"`
+	Host 			string 	`json:"host"`
+	Port 			int 	`json:"port"`
+	Username 		string 	`json:"username"`
+	Password 		string 	`json:"password"`
+	SSL				bool 	`json:"ssl"`
+	CACert 			string	`json:"ca_cert"`
+	TLSCert 		string	`json:"tls_cert"`
+	TLSKey 			string 	`json:"tls_key"`
+	EventTopic 		string 	`json:"eventTopic"`
+	CommandTopic 	string 	`json:"commandTopic"`
 }
 
 type MoteConfig struct {

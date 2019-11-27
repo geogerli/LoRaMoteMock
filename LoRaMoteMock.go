@@ -23,22 +23,22 @@ import (
 
 type MoteMainWindow struct {
 	*walk.MainWindow
-	mqttClient                      paho.Client
-	model                           *MoteModel
-	tv                              *walk.TableView
-	jsonView                        *walk.TreeView
-	host,username,password          *walk.LineEdit
-	port,sendInterval               *walk.NumberEdit
-	connect, disconnect,caConf,send *walk.PushButton
-	ascii,noAscii                   *walk.RadioButton
-	msg,data                        *walk.TextEdit
-	ssl,timeSend                    *walk.CheckBox
-	connConf                        ConnectConfig
-	motesConf                       MotesConfig
-	currentMoteConf                 MoteConfig
-	connConfFileName                string
-	moteConfFileName                string
-	icon                            *walk.Icon
+	mqttClient                         paho.Client
+	model                              *MoteModel
+	tv                                 *walk.TableView
+	jsonView                           *walk.TreeView
+	host,username,password             *walk.LineEdit
+	port,sendInterval                  *walk.NumberEdit
+	connect, disconnect, mqttConf,send *walk.PushButton
+	ascii,noAscii                      *walk.RadioButton
+	msg,data                           *walk.TextEdit
+	timeSend                       	   *walk.CheckBox
+	connConf                           ConnectConfig
+	motesConf                          MotesConfig
+	currentMoteConf                    MoteConfig
+	connConfFileName                   string
+	moteConfFileName                   string
+	icon                               *walk.Icon
 }
 
 func main() {
@@ -66,8 +66,7 @@ func main() {
 					LineEdit{AssignTo:&mw.password,PasswordMode:true},
 					PushButton{Text:"连接", AssignTo: &mw.connect,OnClicked:mw.Connect},
 					PushButton{Text:"断开连接", AssignTo:&mw.disconnect, Enabled:false, OnClicked: mw.Disconnect},
-					CheckBox{Text:"开启SSL/TLS",AssignTo:&mw.ssl,OnClicked:mw.SSL},
-					PushButton{Text:"证书配置",Enabled:false,AssignTo:&mw.caConf,OnClicked: mw.ConnectConfig},
+					PushButton{Text:"连接配置",AssignTo:&mw.mqttConf,OnClicked: mw.ConnectConfig},
 					PushButton{Text:"终端配置",OnClicked: mw.MoteConfig},
 					PushButton{Text:"清空数据",OnClicked: mw.Clean},
 				},
@@ -147,6 +146,8 @@ func main() {
 	if err != nil {
 		panic("LoRaMoteMock窗口创建失败")
 	}
+	mw.connConf.EventTopic = "gateway/%s/event/%s"
+	mw.connConf.CommandTopic = "gateway/+/command/#"
 	_ = mw.port.SetValue(1883)
 	_ = mw.sendInterval.SetValue(1000)
 	mw.ascii.SetChecked(true)
@@ -212,7 +213,7 @@ func (mw *MoteMainWindow) Connect()  {
 		if mw.host.Text() != "" && mw.port.Value() > 0 {
 			opts := paho.NewClientOptions()
 			serverAddr := fmt.Sprintf("%s:%d",mw.host.Text(),int(mw.port.Value()))
-			if mw.ssl.Checked() {
+			if mw.connConf.SSL {
 				if mw.connConf.CACert != "" {
 					serverAddr = fmt.Sprintf("ssl://%s:%d",mw.host.Text(),int(mw.port.Value()))
 					tlsconfig, err := newTLSConfig(mw.connConf.CACert, mw.connConf.TLSCert, mw.connConf.TLSKey)
@@ -250,10 +251,8 @@ func (mw *MoteMainWindow) Connect()  {
 				mw.password.SetEnabled(false)
 				mw.disconnect.SetEnabled(true)
 				mw.connect.SetEnabled(false)
-				mw.caConf.SetEnabled(false)
-				mw.ssl.SetEnabled(false)
-				topic := "gateway/+/command/#"
-				token := mw.mqttClient.Subscribe(topic,0, mw.HandleData)
+				mw.mqttConf.SetEnabled(false)
+				token := mw.mqttClient.Subscribe(mw.connConf.CommandTopic,0, mw.HandleData)
 				if token.Wait() && token.Error() != nil {
 					msg := "订阅失败:" + token.Error().Error()
 					walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
@@ -276,9 +275,8 @@ func (mw *MoteMainWindow) Disconnect()  {
 	mw.username.SetEnabled(true)
 	mw.password.SetEnabled(true)
 	mw.disconnect.SetEnabled(false)
-	mw.caConf.SetEnabled(true)
+	mw.mqttConf.SetEnabled(true)
 	mw.mqttClient.Disconnect(0)
-	mw.ssl.SetEnabled(true)
 }
 
 func (mw *MoteMainWindow) MoteConfig() {
@@ -462,23 +460,23 @@ func (mw *MoteMainWindow) Clean()  {
 	_ = mw.tv.SetSelectedIndexes([]int{})
 }
 
-func (mw *MoteMainWindow) SSL()  {
-	if mw.ssl.Checked() {
-		mw.caConf.SetEnabled(true)
-	}else{
-		mw.caConf.SetEnabled(false)
-	}
-}
-
 func (mw *MoteMainWindow) ConnectConfig()  {
 	var dlg *walk.Dialog
+	var ssl *walk.CheckBox
 	var caCert,tlsCert,tlsKey *walk.LineEdit
 	var acceptPB, cancelPB *walk.PushButton
+	var db *walk.DataBinder
 	_ = Dialog{
 		Title: "连接配置",
 		Icon: mw.icon,
 		Layout:   VBox{},
 		AssignTo: &dlg,
+		DataBinder: DataBinder{
+			AssignTo:&db,
+			Name:"config",
+			DataSource: &mw.connConf,
+			ErrorPresenter: ToolTipErrorPresenter{},
+		},
 		DefaultButton: &acceptPB,
 		CancelButton:  &cancelPB,
 		MinSize: Size{400, 200},
@@ -486,9 +484,21 @@ func (mw *MoteMainWindow) ConnectConfig()  {
 			Composite{
 				Layout:Grid{Columns: 3},
 				Children:[]Widget{
+					Label{Text:"事件主题:"},
+					LineEdit{Text:Bind("EventTopic")},
+					HSpacer{},
+					Label{Text:"命令主题:"},
+					LineEdit{Text:Bind("CommandTopic")},
+					HSpacer{},
+					Label{Text:"SSL配置:"},
+					CheckBox{Text:"开启SSL/TLS",AssignTo:&ssl,Checked:Bind("SSL"),OnCheckStateChanged: func() {
+						mw.connConf.SSL = ssl.Checked()
+						_ = db.Reset()
+					}},
+					HSpacer{},
 					Label{Text:"CA证书:"},
-					LineEdit{Text:Bind("CACert"),AssignTo:&caCert},
-					PushButton{Text:"打开",OnClicked: func() {
+					LineEdit{Text:Bind("CACert"),AssignTo:&caCert,Enabled:Bind("SSL")},
+					PushButton{Text:"打开",Enabled:Bind("SSL"),OnClicked: func() {
 						dlg := new(walk.FileDialog)
 						dlg.Title = "请选择CA证书"
 						dlg.Filter = "CA证书 (*.crt)|*.crt|所有文件 (*.*)|*.*"
@@ -500,8 +510,8 @@ func (mw *MoteMainWindow) ConnectConfig()  {
 						_ = caCert.SetText(dlg.FilePath)
 					}},
 					Label{Text:"客户端证书:"},
-					LineEdit{Text:Bind("TLSCert"),AssignTo:&tlsCert},
-					PushButton{Text:"打开",OnClicked: func() {
+					LineEdit{Text:Bind("TLSCert"),AssignTo:&tlsCert,Enabled:Bind("SSL")},
+					PushButton{Text:"打开",Enabled:Bind("SSL"),OnClicked: func() {
 						dlg := new(walk.FileDialog)
 						dlg.Title = "请选择客户端证书"
 						dlg.Filter = "客户端证书 (*.crt)|*.crt|所有文件 (*.*)|*.*"
@@ -513,8 +523,8 @@ func (mw *MoteMainWindow) ConnectConfig()  {
 						_ = tlsCert.SetText(dlg.FilePath)
 					}},
 					Label{Text:"客户端证书秘钥:"},
-					LineEdit{Text:Bind("TLSKey"),AssignTo:&tlsKey},
-					PushButton{Text:"打开",OnClicked: func() {
+					LineEdit{Text:Bind("TLSKey"),AssignTo:&tlsKey,Enabled:Bind("SSL")},
+					PushButton{Text:"打开",Enabled:Bind("SSL"),OnClicked: func() {
 						dlg := new(walk.FileDialog)
 						dlg.Title = "请选择客户端证书秘钥"
 						dlg.Filter = "客户端证书秘钥 (*.key)|*.key|所有文件 (*.*)|*.*"
@@ -535,9 +545,7 @@ func (mw *MoteMainWindow) ConnectConfig()  {
 						AssignTo: &acceptPB,
 						Text:     "确定",
 						OnClicked: func() {
-							mw.connConf.CACert = caCert.Text()
-							mw.connConf.TLSCert = tlsCert.Text()
-							mw.connConf.TLSKey = tlsKey.Text()
+							_ = db.Submit()
 							dlg.Accept()
 						},
 					},
@@ -550,9 +558,6 @@ func (mw *MoteMainWindow) ConnectConfig()  {
 			},
 		},
 	}.Create(mw)
-	_ = caCert.SetText(mw.connConf.CACert)
-	_ = tlsCert.SetText(mw.connConf.TLSCert)
-	_ = tlsKey.SetText(mw.connConf.TLSKey)
 	dlg.Run()
 }
 
@@ -653,7 +658,7 @@ func (mw *MoteMainWindow) HandleDataDown(phy *lorawan.PHYPayload) bool{
 }
 
 func (mw *MoteMainWindow) PushData(gatewayEUI string,event string, msg proto.Message)  {
-	topic := fmt.Sprintf("gateway/%s/event/%s",gatewayEUI,event)
+	topic := fmt.Sprintf(mw.connConf.EventTopic,gatewayEUI,event)
 	b, err := proto.Marshal(msg)
 	if err != nil {
 		fmt.Println("marshal message error")
