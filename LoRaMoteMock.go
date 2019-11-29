@@ -299,13 +299,13 @@ func (mw *MoteMainWindow) MoteConfig() {
 		},
 		DefaultButton: &acceptPB,
 		CancelButton:  &cancelPB,
-		MinSize: Size{400, 200},
+		MinSize: Size{420, 400},
 		Children: []Widget{
 			TabWidget{
 				Pages:[]TabPage{
 					{
 						Title:"基础配置",
-						Layout:Grid{Columns: 2},
+						Layout:Grid{Columns: 3},
 						Children:[]Widget{
 							Label{Text: "配置名称:"},
 							ComboBox{AssignTo: &name,Editable: true, OnCurrentIndexChanged: func() {
@@ -313,6 +313,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 								mw.currentMoteConf = mw.motesConf.Configs[mw.motesConf.Current]
 								_ = db.Reset()
 							}},
+							HSpacer{},
 							Label{Text:"入网方式:"},
 							Composite{
 								Layout: HBox{},
@@ -321,7 +322,7 @@ func (mw *MoteMainWindow) MoteConfig() {
 										mw.currentMoteConf.OTAA = otaa.Checked()
 										_ = db.Reset()
 									}},
-									CheckBox{AssignTo:&join,Text:"是否重新入网",Enabled:Bind("OTAA"),OnCheckStateChanged: func() {
+									CheckBox{AssignTo:&join,Text:"重新入网",Enabled:Bind("OTAA"),OnCheckStateChanged: func() {
 										if mw.currentMoteConf.OTAA && join.Checked() {
 											mw.currentMoteConf.DevAddr = ""
 											mw.currentMoteConf.NwkSKey = ""
@@ -332,23 +333,52 @@ func (mw *MoteMainWindow) MoteConfig() {
 									}},
 								},
 							},
-
+							HSpacer{},
 							Label{Text:"网关EUI:"},
 							LineEdit{Text:Bind("GatewayEui",Regexp{Pattern:"^[0-9a-fA-F]{16,16}$"})},
+							PushButton{Text:"随机",OnClicked: func() {
+								mw.currentMoteConf.GatewayEui = GetRandomHexString(16)
+								_ = db.Reset()
+							}},
 							Label{Text:"应用EUI:",Visible:Bind("OTAA")},
 							LineEdit{Text:Bind("AppEui"),Visible:Bind("OTAA")},
+							PushButton{Text:"随机",Visible:Bind("OTAA"),OnClicked: func() {
+								mw.currentMoteConf.AppEui = GetRandomHexString(16)
+								_ = db.Reset()
+							}},
 							Label{Text:"终端EUI:"},
 							LineEdit{Text:Bind("DevEui",Regexp{Pattern:"^[0-9a-fA-F]{16,16}$"})},
+							PushButton{Text:"随机",OnClicked: func() {
+								mw.currentMoteConf.DevEui = GetRandomHexString(16)
+								_ = db.Reset()
+							}},
 							Label{Text:"应用秘钥:",Visible:Bind("OTAA")},
 							LineEdit{Text:Bind("AppKey"),Visible:Bind("OTAA")},
+							PushButton{Text:"随机",Visible:Bind("OTAA"),OnClicked: func() {
+								mw.currentMoteConf.AppKey = GetRandomHexString(32)
+								_ = db.Reset()
+							}},
 							Label{Text:"终端地址:"},
 							LineEdit{Text:Bind("DevAddr"),ReadOnly:Bind("OTAA")},
+							PushButton{Text:"随机",OnClicked: func() {
+								mw.currentMoteConf.DevAddr = GetRandomHexString(8)
+								_ = db.Reset()
+							}},
 							Label{Text:"网络会话秘钥:"},
 							LineEdit{Text:Bind("NwkSKey"),ReadOnly:Bind("OTAA")},
+							PushButton{Text:"随机",OnClicked: func() {
+								mw.currentMoteConf.NwkSKey = GetRandomHexString(32)
+								_ = db.Reset()
+							}},
 							Label{Text:"应用会话秘钥:"},
 							LineEdit{Text:Bind("AppSKey"),ReadOnly:Bind("OTAA")},
+							PushButton{Text:"随机",OnClicked: func() {
+								mw.currentMoteConf.AppSKey = GetRandomHexString(32)
+								_ = db.Reset()
+							}},
 							Label{Text:"上行计数:"},
 							NumberEdit{Value:Bind("FCnt")},
+							HSpacer{},
 						},
 					},
 					{
