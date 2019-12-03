@@ -625,6 +625,7 @@ func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 					DevAddr:      mw.currentMoteConf.DevAddr,
 					MType:        phy.MHDR.MType.String(),
 					GatewayID:    hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
+					Frequency: 	  packet.Payload.TXPK.Freq,
 					Time:         time.Now().Format("2006-01-02 15:04:05"),
 					MoteOrigData: origData.String(),
 					GatewayOrigData: string(d),
