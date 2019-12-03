@@ -79,6 +79,10 @@ func main() {
 						MinSize:Size{Width:maxWidth*3/5},
 						ColumnsOrderable: true,
 						MultiSelection:   true,
+						ContextMenuItems:[]MenuItem{
+							Action{Text:"查看终端数据", OnTriggered: mw.tvItemActivated},
+							Action{Text:"查看网关数据", OnTriggered: mw.tvItemGatewayActivated},
+						},
 						Columns: []TableViewColumn{
 							{Title: "序号"},
 							{Title: "数据方向"},
@@ -613,15 +617,17 @@ func (mw *MoteMainWindow) HandleData(client paho.Client, message paho.Message){
 				var origData bytes.Buffer
 				jsonData,_ := phy.MarshalJSON()
 				_ = json.Indent(&origData, jsonData, "", "  ")
+				d,_ := json.MarshalIndent(&downlinkFrame,"","  ")
 				dd := &Mote{
-					Index: mw.model.Len() + 1,
-					Direction:"downlink",
-					DevEUI: mw.currentMoteConf.DevEui,
-					DevAddr: mw.currentMoteConf.DevAddr,
-					MType: phy.MHDR.MType.String(),
-					GatewayID: hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
-					Time:time.Now().Format("2006-01-02 15:04:05"),
-					OrigData:origData.String(),
+					Index:        mw.model.Len() + 1,
+					Direction:    "downlink",
+					DevEUI:       mw.currentMoteConf.DevEui,
+					DevAddr:      mw.currentMoteConf.DevAddr,
+					MType:        phy.MHDR.MType.String(),
+					GatewayID:    hex.EncodeToString(downlinkFrame.TxInfo.GatewayId),
+					Time:         time.Now().Format("2006-01-02 15:04:05"),
+					MoteOrigData: origData.String(),
+					GatewayOrigData: string(d),
 				}
 				if phy.MHDR.MType == lorawan.ConfirmedDataDown ||  phy.MHDR.MType == lorawan.UnconfirmedDataDown {
 					mpl := phy.MACPayload.(*lorawan.MACPayload)
@@ -717,25 +723,28 @@ func (mw *MoteMainWindow) sendMsg() error{
 			walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 			return err
 		}
+		frames,_:= packet.GetUplinkFrames(true,false)
 		var origData bytes.Buffer
 		jsonData,_ := phy.MarshalJSON()
 		_ = json.Indent(&origData, jsonData, "", "  ")
+		d,_ :=  json.MarshalIndent(&frames[0],"","  ")
 		du := &Mote{
-			Index:mw.model.Len() + 1,
-			Direction:"uplink",
-			DevEUI:mw.currentMoteConf.DevEui,
-			MType:phy.MHDR.MType.String(),
-			GatewayID:mw.currentMoteConf.GatewayEui,
-			Rssi:packet.Payload.RXPK[0].RSSI,
-			LoRaSNR:packet.Payload.RXPK[0].LSNR,
-			Frequency:packet.Payload.RXPK[0].Freq,
-			Time:time.Now().Format("2006-01-02 15:04:05"),
-			OrigData:origData.String(),
+			Index:        mw.model.Len() + 1,
+			Direction:    "uplink",
+			DevEUI:       mw.currentMoteConf.DevEui,
+			MType:        phy.MHDR.MType.String(),
+			GatewayID:    mw.currentMoteConf.GatewayEui,
+			Rssi:         packet.Payload.RXPK[0].RSSI,
+			LoRaSNR:      packet.Payload.RXPK[0].LSNR,
+			Frequency:    packet.Payload.RXPK[0].Freq,
+			Time:         time.Now().Format("2006-01-02 15:04:05"),
+			MoteOrigData: origData.String(),
+			GatewayOrigData:string(d),
 		}
 		mw.model.Items = append(mw.model.Items, du)
 		mw.model.PublishRowsReset()
 		_ = mw.tv.SetSelectedIndexes([]int{})
-		frames,_:= packet.GetUplinkFrames(true,false)
+
 		for j := range frames {
 			mw.PushData(mw.currentMoteConf.GatewayEui,"up",&frames[j])
 		}
@@ -775,30 +784,32 @@ func (mw *MoteMainWindow) sendMsg() error{
 		walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
 		return err
 	}
+	frames,_:= packet.GetUplinkFrames(true,false)
 	var origData bytes.Buffer
 	jsonData,_ := phy.MarshalJSON()
 	_ = json.Indent(&origData, jsonData, "", "  ")
+	d,_ :=  json.MarshalIndent(&frames[0],"","  ")
 	du := &Mote{
-		Index:mw.model.Len() + 1,
-		Direction:"uplink",
-		DevEUI:mw.currentMoteConf.DevEui,
-		DevAddr:mw.currentMoteConf.DevAddr,
-		MType:phy.MHDR.MType.String(),
-		GatewayID:mw.currentMoteConf.GatewayEui,
-		Rssi:packet.Payload.RXPK[0].RSSI,
-		LoRaSNR:packet.Payload.RXPK[0].LSNR,
-		Frequency:packet.Payload.RXPK[0].Freq,
-		FCnt:mw.currentMoteConf.FCnt,
-		FPort:mw.currentMoteConf.FPort,
-		HexData:hex.EncodeToString(bmsg),
-		AsciiData:BytesToString(bmsg),
-		Time:time.Now().Format("2006-01-02 15:04:05"),
-		OrigData:origData.String(),
+		Index:        mw.model.Len() + 1,
+		Direction:    "uplink",
+		DevEUI:       mw.currentMoteConf.DevEui,
+		DevAddr:      mw.currentMoteConf.DevAddr,
+		MType:        phy.MHDR.MType.String(),
+		GatewayID:    mw.currentMoteConf.GatewayEui,
+		Rssi:         packet.Payload.RXPK[0].RSSI,
+		LoRaSNR:      packet.Payload.RXPK[0].LSNR,
+		Frequency:    packet.Payload.RXPK[0].Freq,
+		FCnt:         mw.currentMoteConf.FCnt,
+		FPort:        mw.currentMoteConf.FPort,
+		HexData:      hex.EncodeToString(bmsg),
+		AsciiData:    BytesToString(bmsg),
+		Time:         time.Now().Format("2006-01-02 15:04:05"),
+		MoteOrigData: origData.String(),
+		GatewayOrigData:string(d),
 	}
 	mw.model.Items = append(mw.model.Items, du)
 	mw.model.PublishRowsReset()
 	_ = mw.tv.SetSelectedIndexes([]int{})
-	frames,_:= packet.GetUplinkFrames(true,false)
 	for j := range frames {
 		mw.PushData(mw.currentMoteConf.GatewayEui,"up",&frames[j])
 	}
@@ -849,7 +860,19 @@ func (mw *MoteMainWindow) TimeSend()  {
 func (mw *MoteMainWindow) tvItemActivated() {
 	msg := ""
 	for _, i := range mw.tv.SelectedIndexes() {
-		msg += mw.model.Items[i].OrigData + "\n"
+		msg += mw.model.Items[i].MoteOrigData + "\n"
+	}
+	_ = mw.data.SetText(strings.Replace(msg, "\n", "\r\n", -1))
+
+	m := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(msg), &m); err == nil {
+		_ = mw.jsonView.SetModel(NewJSONModel(m))
+	}
+}
+func (mw *MoteMainWindow) tvItemGatewayActivated() {
+	msg := ""
+	for _, i := range mw.tv.SelectedIndexes() {
+		msg += mw.model.Items[i].GatewayOrigData + "\n"
 	}
 	_ = mw.data.SetText(strings.Replace(msg, "\n", "\r\n", -1))
 

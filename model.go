@@ -47,22 +47,23 @@ type MotesConfig struct {
 
 
 type Mote struct {
-	Index   int
-	Direction string
-	DevEUI   string
-	DevAddr string
-	MType	string
-	GatewayID string
-	Rssi int16
-	LoRaSNR float64
-	Frequency float64
-	FCnt uint32
-	FPort uint8
-	HexData string
-	AsciiData string
-	Time string
-	checked bool
-	OrigData string
+	Index        int
+	Direction    string
+	DevEUI       string
+	DevAddr      string
+	MType        string
+	GatewayID    string
+	Rssi         int16
+	LoRaSNR      float64
+	Frequency    float64
+	FCnt         uint32
+	FPort        uint8
+	HexData      string
+	AsciiData    string
+	Time         string
+	checked      bool
+	MoteOrigData string
+	GatewayOrigData string
 }
 
 type MoteModel struct {
