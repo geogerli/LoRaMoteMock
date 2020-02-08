@@ -10,5 +10,7 @@ require (
 	github.com/lxn/walk v0.0.0-20191121152919-b7c43041fb1b
 	github.com/lxn/win v0.0.0-20191106123917-121afc750dd3
 	github.com/pkg/errors v0.8.1
+	github.com/robertkrimen/otto v0.0.0-20191219234010-c382bd3c16ff
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
+	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )

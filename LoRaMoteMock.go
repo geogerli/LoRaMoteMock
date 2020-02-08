@@ -14,6 +14,7 @@ import (
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 	"github.com/pkg/errors"
+	"github.com/robertkrimen/otto"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -33,20 +34,27 @@ type MoteMainWindow struct {
 	ascii,noAscii                      *walk.RadioButton
 	msg,data                           *walk.TextEdit
 	timeSend                       	   *walk.CheckBox
+	js                       	       *walk.CheckBox
 	connConf                           ConnectConfig
 	motesConf                          MotesConfig
 	currentMoteConf                    MoteConfig
 	connConfFileName                   string
 	moteConfFileName                   string
 	icon                               *walk.Icon
+	vm								   *otto.Otto
 }
 
 func main() {
-	mw := &MoteMainWindow{model: NewMoteModel()}
+	mw := &MoteMainWindow{model: NewMoteModel(),vm: otto.New()}
+	_,err := mw.vm.Run(randomJson)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	mw.icon,_ = walk.NewIconFromResourceId(3)
 	maxWidth := int(win.GetSystemMetrics(win.SM_CXSCREEN)) - 200
 	maxHeight := int(win.GetSystemMetrics(win.SM_CYSCREEN)) - 100
-	err := MainWindow{
+	err = MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "LoRaMoteMock",
 		Icon:		mw.icon,
@@ -116,6 +124,8 @@ func main() {
 									CheckBox{Text:"定时发送",AssignTo:&mw.timeSend,OnClicked:mw.TimeSend},
 									NumberEdit{AssignTo:&mw.sendInterval},
 									Label{Text:"ms/次"},
+
+									CheckBox{Text:"JSON模板",AssignTo:&mw.js},
 								},
 							},
 							Composite{
@@ -764,6 +774,15 @@ func (mw *MoteMainWindow) sendMsg() error{
 	var err error
 	if mw.ascii.Checked() {
 		bmsg = []byte(mw.msg.Text())
+		if mw.js.Checked() {
+			value,err := mw.vm.Call("randomjson",nil,mw.msg.Text())
+			if err != nil{
+				msg := "JSON模板格式错误:" + err.Error()
+				walk.MsgBox(mw, "错误", msg, walk.MsgBoxIconError)
+				return err
+			}
+			bmsg = []byte(value.String())
+		}
 	}else{
 		bmsg,err = hex.DecodeString(mw.msg.Text())
 		if err != nil {
@@ -828,12 +847,14 @@ func (mw *MoteMainWindow) SetSend() {
 		mw.sendInterval.SetEnabled(false)
 		mw.msg.SetEnabled(false)
 		mw.send.SetEnabled(false)
+		mw.js.SetEnabled(false)
 	}else{
 		mw.ascii.SetEnabled(true)
 		mw.noAscii.SetEnabled(true)
 		mw.sendInterval.SetEnabled(true)
 		mw.msg.SetEnabled(true)
 		mw.send.SetEnabled(true)
+		mw.js.SetEnabled(true)
 	}
 }
 
